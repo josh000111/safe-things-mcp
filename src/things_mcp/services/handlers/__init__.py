@@ -1,0 +1,50 @@
+"""Handler registry for V2 propose/confirm/undo.
+
+Each handler module exposes a uniform shape:
+
+* ``KIND`` — string identifier persisted in ``pending_actions.kind`` and
+  ``undo_log.action_kind``.
+* ``make_preview(payload: dict) -> str`` — human-readable summary the
+  agent surfaces to the user during the propose step.
+* ``execute(payload: dict) -> dict`` — async; performs the URL-scheme
+  mutation. **Writes the undo_log row before the mutation** (per the
+  CLAUDE.md V2 acceptance gate), then patches in the new target UUID
+  and after-state once polling confirms the change landed. Returns the
+  tool result.
+* ``undo(undo_entry: dict) -> dict`` — async; reverses the action and
+  deletes the undo_log row.
+
+Adding a new mutating tool = drop a new module here and register its
+KIND in ``REGISTRY``. The dispatcher in ``tools/confirm.py`` and the
+``undo`` tool both look the handler up by kind.
+"""
+from __future__ import annotations
+
+from typing import Protocol
+
+from . import add_todo
+
+
+class Handler(Protocol):
+    KIND: str
+
+    def make_preview(self, payload: dict) -> str: ...
+
+    async def execute(self, payload: dict) -> dict: ...
+
+    async def undo(self, undo_entry: dict) -> dict: ...
+
+
+REGISTRY: dict[str, Handler] = {
+    add_todo.KIND: add_todo,  # type: ignore[dict-item]
+}
+
+
+def get(kind: str) -> Handler:
+    handler = REGISTRY.get(kind)
+    if handler is None:
+        raise RuntimeError(
+            f"No handler registered for kind={kind!r}. "
+            f"Known kinds: {sorted(REGISTRY)}"
+        )
+    return handler

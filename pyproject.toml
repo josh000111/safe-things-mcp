@@ -1,0 +1,42 @@
+[project]
+name = "things-mcp"
+version = "0.1.0"
+description = "Local MCP server for Cultured Code's Things 3 on macOS"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Josh Smith" }]
+dependencies = [
+    "mcp>=1.2.0",
+    "things.py>=0.0.15",
+    "pydantic>=2.7",
+]
+
+[project.scripts]
+things-mcp = "things_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/things_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]

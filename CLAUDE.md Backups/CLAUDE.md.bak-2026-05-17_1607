@@ -1,0 +1,67 @@
+# things-mcp — Project Instructions
+
+Project-level rules. Adds to (does not override) `~/.claude/CLAUDE.md`.
+
+## When this file applies
+
+Loaded automatically by Claude Code only when launched from inside this repo directory. It governs **development and in-repo testing** of the MCP — it does NOT travel with the MCP when end users (including you, in other projects or other clients) consume it. Safety guarantees that must hold at *runtime* belong in the MCP code, not here.
+
+## Project type
+
+Python MCP **stdio** server for Cultured Code's Things 3 on macOS. No web UI, no HTTP surface. FastMCP-based. Reads go through `things.py` (read-only SQLite) via `services/things_repo.py`. Writes go through the Things URL scheme via `services/url_scheme.py` with an ephemeral aiohttp `x-callback-url` listener on `127.0.0.1`.
+
+V1 scope: full-coverage reads, writes **quarantined to the Inbox**. V2 = full-parity writes behind a two-phase propose/confirm gate with an undo log.
+
+## V2 acceptance requirement — Undo lives in the code
+
+Production safety for end users depends on the MCP itself, not on prompt rules. Therefore for V2:
+
+- Every destructive or mutating tool (anything beyond V1's Inbox-add) MUST write to the `undo_log` table in `~/.things-mcp/state.db` **before** issuing the URL-scheme call.
+- An `undo_last` (or equivalent) tool MUST be able to reverse the most recent N actions by replaying inverse URL-scheme calls.
+- No mutating tool ships in V2 without a corresponding inverse and a passing undo test.
+- The propose/confirm gate is the second layer: destructive ops return a preview first, mutate only on explicit confirm.
+
+Treat these as code-level invariants, not aspirational guidance. CLAUDE.md cannot protect end users; the undo log can.
+
+## Dev-loop testing conventions
+
+These are conventions for sessions where I'm building or testing the MCP from inside this repo. They are not runtime safety guarantees.
+
+- During dev, prefer running the server against the **Things Test** macOS user account (separate Things Cloud account, fake data). Fast-User-Switch into it before manual write-path testing.
+- For unit/integration reads, point `THINGS_DB_PATH` at a snapshot copy rather than any live DB.
+- If a test session genuinely needs to run against the main user's real Things data (rare; usually only for V1 final acceptance), run `backup_things3.sh` first and confirm a fresh timestamped backup landed in `~/Documents/Things DB Backups (Cultured Code)/`.
+- Tag test-created todos (e.g. `tags=['mcp-test']`) so cleanup is one filter+trash.
+
+## Coding invariants — do not regress
+
+- **Never modify `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/` directly.** All writes go through the Things URL scheme. No ad-hoc SQLite mutations, no edits inside the `.thingsdatabase` package.
+- **V1 Inbox-only enforcement must hold:** `services.url_scheme.build_add_url(list_id='today', ...)` must raise `ValueError`. Do not add a bypass parameter "for convenience."
+- Reads are read-only. If tempted to write via SQLite, stop — route through the URL scheme.
+- Errors from the URL-scheme callback must surface as clean MCP tool errors within `THINGS_MCP_CALLBACK_TIMEOUT` seconds — never hang.
+
+## Verification before claiming "done"
+
+Overrides the global "ask before marking complete" fallback for non-web projects. Before claiming a task complete:
+
+1. `uv run pytest` — all green (or state clearly that no tests cover the change).
+2. `uv run things-mcp --help` runs without error.
+3. Server starts and `health()` returns `things_db_path`, `things_app_running=true`, `things_py_version`, `state_db_exists=true`.
+4. For write-path or URL-scheme changes: run the relevant items from `tests/manual_checklist.md` inside the **Things Test** macOS user.
+5. For V2 work touching destructive ops: the inverse undo path must be tested and proven to round-trip.
+6. The Inbox-bypass `ValueError` check still passes.
+
+If a verification step cannot be run in the current environment, say so explicitly — do not silently skip or claim success.
+
+## Repo layout pointers
+
+- `src/things_mcp/server.py` — FastMCP entrypoint, tool registrations.
+- `src/things_mcp/services/things_repo.py` — single read swap-point. If Things' schema moves, this is the only file to change.
+- `src/things_mcp/services/url_scheme.py` — write path. Inbox-only enforcement lives here.
+- `src/things_mcp/state/` — local SQLite at `~/.things-mcp/state.db` (`pending_actions`, `undo_log` — scaffolded V1, load-bearing in V2).
+- `src/things_mcp/tools/` — per-tool MCP definitions.
+- `src/things_mcp/config.py` — env vars (`THINGS_DB_PATH`, `THINGS_MCP_STATE_DIR`, `THINGS_MCP_CALLBACK_TIMEOUT`, `THINGS_AUTH_TOKEN`).
+- `tests/manual_checklist.md` — V1 acceptance checklist.
+
+## Conventions
+
+- Python 3.11+, managed with `uv`. Use `uv run …`, never bare `python`.

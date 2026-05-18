@@ -1,0 +1,34 @@
+"""Runtime configuration: paths, env, Things DB resolution."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import things
+
+STATE_DIR = Path(os.environ.get("THINGS_MCP_STATE_DIR", Path.home() / ".things-mcp"))
+STATE_DB_PATH = STATE_DIR / "state.db"
+
+THINGS_DB_PATH = Path(
+    os.environ.get("THINGS_DB_PATH", things.database.DEFAULT_FILEPATH)
+)
+
+THINGS_AUTH_TOKEN = os.environ.get("THINGS_AUTH_TOKEN")
+
+WRITE_POLL_TIMEOUT_SECONDS = float(
+    os.environ.get(
+        "THINGS_MCP_WRITE_POLL_TIMEOUT",
+        os.environ.get("THINGS_MCP_CALLBACK_TIMEOUT", "5"),
+    )
+)
+WRITE_POLL_INTERVAL_SECONDS = float(
+    os.environ.get("THINGS_MCP_WRITE_POLL_INTERVAL", "0.1")
+)
+
+PENDING_TTL_SECONDS = 5 * 60
+UNDO_LOG_MAX_ROWS = 200
+UNDO_LOG_MAX_AGE_DAYS = 30
+
+
+def ensure_state_dir() -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
