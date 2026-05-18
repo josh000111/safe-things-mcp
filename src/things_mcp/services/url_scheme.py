@@ -47,7 +47,17 @@ def build_add_url(
 # any non-Inbox list_id. V2 lives in separate functions so the V1 guard
 # stays in place as a tripwire.
 
-_V2_LIST_KEYWORDS = {"inbox", "today", "anytime", "someday", "upcoming"}
+# Built-in list keywords that route via ``when=`` (not ``list=``).
+# The Things URL scheme ``list`` parameter only accepts project/area names;
+# built-in scheduling targets must use ``when=``.
+# ``inbox`` is the default destination when neither ``when`` nor ``list-id``
+# is present, so it needs no extra parameter at all.
+_V2_WHEN_KEYWORDS = {"today", "anytime", "someday"}
+
+# Computed views in Things that are NOT valid write destinations.
+# Surfacing a clear error beats silently emitting ``list-id=upcoming``
+# (which would be interpreted as a project UUID lookup and fail).
+_V2_COMPUTED_VIEWS = {"upcoming", "logbook", "trash"}
 
 
 def build_add_url_v2(
@@ -60,17 +70,33 @@ def build_add_url_v2(
     tags: list[str] | None = None,
     checklist_items: list[str] | None = None,
 ) -> str:
-    """V2 ``things:///add`` URL builder. Routes to ``list=`` for reserved
-    keywords (inbox/today/anytime/someday/upcoming) and ``list-id=`` for
-    project/area UUIDs."""
+    """V2 ``things:///add`` URL builder.
+
+    Routing rules (per Things URL scheme docs):
+    - ``inbox``            → no extra param (Things default destination)
+    - ``today`` / ``anytime`` / ``someday`` → ``when=<value>``
+    - any other string     → ``list-id=<value>`` (project or area UUID)
+    """
     if not title:
         raise ValueError("title is required")
     if not list_id:
         raise ValueError("list_id is required")
 
     params: list[tuple[str, str]] = [("title", title)]
-    if list_id.lower() in _V2_LIST_KEYWORDS:
-        params.append(("list", list_id.lower()))
+    list_id_lower = list_id.lower()
+    if list_id_lower in _V2_COMPUTED_VIEWS:
+        raise ValueError(
+            f"list_id={list_id!r} is a computed view in Things, not a write "
+            "destination. To schedule a task for a future date that appears in "
+            "Upcoming, use `when='<YYYY-MM-DD>'` (e.g. when='2026-05-25'). "
+            "Logbook and Trash are read-only."
+        )
+    if list_id_lower == "inbox":
+        pass  # default destination — no parameter needed
+    elif list_id_lower in _V2_WHEN_KEYWORDS:
+        # Explicit ``when`` arg overrides list_id routing (it's more specific).
+        if not when:
+            params.append(("when", list_id_lower))
     else:
         params.append(("list-id", list_id))
 

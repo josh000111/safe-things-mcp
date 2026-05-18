@@ -115,7 +115,7 @@ async def test_execute_builds_correct_url(
     assert len(captured_launches) == 1
     url = captured_launches[0]
     assert url.startswith("things:///add?")
-    assert "list=today" in url
+    assert "when=today" in url  # today routes via when=, not list=
     assert "tags=urgent" in url
 
 

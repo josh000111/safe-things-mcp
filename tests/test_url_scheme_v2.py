@@ -19,17 +19,20 @@ def _params(url: str) -> dict[str, str]:
 # ---------- build_add_url_v2 ----------
 
 
-def test_add_v2_inbox_uses_list_keyword():
+def test_add_v2_inbox_no_extra_param():
+    """Inbox is the default destination — no ``list`` or ``when`` param needed."""
     url = url_scheme.build_add_url_v2(title="t", list_id="inbox")
     p = _params(url)
     assert p["title"] == "t"
-    assert p["list"] == "inbox"
+    assert "list" not in p
+    assert "when" not in p
     assert "list-id" not in p
 
 
-def test_add_v2_today_uses_list_keyword():
+def test_add_v2_today_uses_when_param():
+    """today routes via ``when=today``, not ``list=today``."""
     p = _params(url_scheme.build_add_url_v2(title="t", list_id="today"))
-    assert p == {"title": "t", "list": "today"}
+    assert p == {"title": "t", "when": "today"}
 
 
 def test_add_v2_uuid_uses_list_id_param():
@@ -41,23 +44,44 @@ def test_add_v2_uuid_uses_list_id_param():
 
 
 def test_add_v2_full_payload():
+    """Explicit ``when`` overrides list_id routing for when-keywords."""
     p = _params(
         url_scheme.build_add_url_v2(
             title="Plan",
             list_id="anytime",
             notes="hi",
-            when="tomorrow",
+            when="tomorrow",  # explicit when wins over list_id='anytime'
             deadline="2026-12-31",
             tags=["a", "b"],
             checklist_items=["one", "two"],
         )
     )
-    assert p["list"] == "anytime"
+    # list_id='anytime' is overridden by explicit when='tomorrow'
+    assert "list" not in p
+    assert "list-id" not in p
     assert p["notes"] == "hi"
     assert p["when"] == "tomorrow"
     assert p["deadline"] == "2026-12-31"
     assert p["tags"] == "a,b"
     assert p["checklist-items"] == "one\ntwo"
+
+
+def test_add_v2_anytime_no_explicit_when():
+    """anytime/someday route via ``when=`` when no explicit when is set."""
+    p = _params(url_scheme.build_add_url_v2(title="t", list_id="anytime"))
+    assert p == {"title": "t", "when": "anytime"}
+    p2 = _params(url_scheme.build_add_url_v2(title="t", list_id="someday"))
+    assert p2 == {"title": "t", "when": "someday"}
+
+
+@pytest.mark.parametrize("view", ["upcoming", "Upcoming", "UPCOMING", "logbook", "trash"])
+def test_add_v2_rejects_computed_views(view):
+    """``upcoming`` / ``logbook`` / ``trash`` are computed views in Things —
+    not write destinations. The builder must raise with an actionable hint
+    instead of silently emitting ``list-id=upcoming`` (which would be
+    interpreted as a project UUID lookup and fail far from the call site)."""
+    with pytest.raises(ValueError, match="computed view"):
+        url_scheme.build_add_url_v2(title="t", list_id=view)
 
 
 def test_add_v2_does_not_inbox_guard():

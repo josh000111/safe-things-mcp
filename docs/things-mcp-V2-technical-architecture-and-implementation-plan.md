@@ -11,9 +11,14 @@
 | V2 step 1 — `pending_actions` + `undo_log` CRUD + tests | ✅ Done |
 | V2 step 2 — handler registry + `confirm_action` / `cancel_action` / `list_pending_actions` / `undo` | ✅ Done |
 | V2 step 3 — first `propose_*` (`propose_add_todo`) + round-trip undo test | ✅ Done; **awaiting manual write-path verification on Test user** |
-| V2 step 4 — remaining `propose_*` tools + direct shortcuts + `THINGS_MCP_AUTO_CONFIRM` | ⏳ Next |
-| V2 step 5 — opt-in AppleScript hard-delete (`THINGS_MCP_ALLOW_APPLESCRIPT`) | ⏳ After step 4 user feedback |
-| V2 step 6 — heading & reorder support (AppleScript-dependent) | ⏳ Bundled with step 5 |
+| V2 step 4 chunk A — direct shortcuts (`add_today/anytime/someday_todo`, `complete_todo`) + `upcoming` rejection | ✅ Done (90 tests passing); **awaiting manual verification on Test user** |
+| V2 step 4 chunk B — `THINGS_MCP_AUTO_CONFIRM` flag + `propose_update_todo` | ⏳ Next |
+| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ⏳ |
+| V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ⏳ |
+| V2 step 4 chunk E — `propose_bulk_*` tools | ⏳ |
+| V2 step 4b — dummy-heading interim layer (URL-scheme only) | ⏳ Bundled with step 4 |
+| V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ After step 4 user feedback |
+| V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Bundled with step 5 |
 
 Automated suite: 67 tests, ~1s, hermetic (no real Things DB / URL launches).
 
@@ -201,7 +206,8 @@ Mutating tools split into two tiers based on risk. **Low-risk direct shortcuts**
 | `propose_update_todo(todo_id, fields)` | `confirm_action` | Edits live data. |
 | `propose_move_todo(todo_id, target)` | `confirm_action` | Cross-list moves can be hard to find afterward. |
 | `propose_reorder_todos(list_id, order)` | `confirm_action` | **Requires AppleScript fallback (URL scheme can't reorder).** Deferred to step 5. |
-| `propose_complete_todo(todo_id)` | `confirm_action` | Reversible but visible. |
+| `complete_todo(todo_id)` (direct, single-target) | n/a — no airlock | Reversible (`update?completed=false`). Most common everyday op. |
+| `propose_bulk_complete([todo_id, ...])` | `confirm_action` | Bulk = preview valuable; never bypassable. |
 | `propose_delete_todo(todo_id)` | `confirm_action` — **never bypassable** | Destructive. Soft-delete first (URL `update?canceled=true&completed=true`); AppleScript hard-delete behind `THINGS_MCP_ALLOW_APPLESCRIPT`. |
 | `propose_bulk_*(...)` | `confirm_action` — **never bypassable** | Multi-target = high blast radius. |
 | `propose_add_project(...)` | `confirm_action` | Project creation supports headings via `things:///json` payload. |
@@ -226,7 +232,7 @@ When the env var `THINGS_MCP_AUTO_CONFIRM=1` is set, any tool returning a `propo
 - Pure direct tools lose the structured preview / pre-mutation undo-log row that the airlock guarantees for destructive ops.
 - Host-level permissions (Claude Desktop "ask / allow / deny" per tool) sit *on top* of both tiers and are the user's primary "I trust this MCP" knob.
 
-### 5.3 Heading & reorder limitations
+### 5.3 Heading & reorder limitations — and the dummy-heading workaround
 
 The Things URL scheme **does not support**: creating standalone headings inside existing projects, renaming/deleting headings, or reordering tasks within a list. These all require AppleScript.
 
@@ -234,7 +240,27 @@ What the URL scheme *does* support:
 - `things:///add?heading=Name` — adds a to-do under an *existing* heading (no auto-create).
 - `things:///json?data=[{type:project, items:[{type:heading,...},{type:to-do,...}]}]` — creates a new project with headings in one shot.
 
-`propose_add_heading` and `propose_reorder_todos` are scheduled for step 5/6 alongside the opt-in AppleScript layer.
+`propose_reorder_todos` and real-heading mutations are deferred to step 5 (AppleScript layer). **Step 4b ships a URL-scheme-only interim solution: dummy heading tasks.**
+
+#### Dummy heading convention (step 4b)
+
+Title format: `__HEADING_NAME__` — leading and trailing double underscore, all uppercase between. Regex: `^__[A-Z][A-Z0-9 _\-:]*__$`.
+
+| Operation | Dummy-heading behaviour | Real-heading behaviour |
+| --- | --- | --- |
+| `propose_add_heading(project_id, name)` | Adds a to-do titled `__NAME__` to the project at the requested position. Position controlled by an optional `after_todo_id` param. | Deferred to step 5 (AppleScript). |
+| `propose_update_heading(heading_id_or_name, new_name)` | If target is a dummy task → URL-scheme `update?title=__NEW_NAME__&auth-token=...`. | Deferred to step 5. |
+| `propose_delete_heading(heading_id_or_name)` | Soft-delete the dummy task via `update?canceled=true&completed=true`. | Deferred to step 5. |
+| `get_project(project_id)` extension | Returns a unified `headings: [{kind: "native" \| "dummy", id, name, position}]` array. Dummy-heading tasks are still present in the project's `items` list (the user sees them as tasks in Things), but also surfaced as headings so the agent can reason about them. | Same shape. |
+| Ambiguity resolution | When the user says "edit/delete heading X" and both a native heading named X AND a dummy `__X__` exist in the same project: `propose_*` returns a preview listing both candidates and asks the user to pick. | Same. |
+
+Visual caveat: a `__COOKING__` task in the Things UI is rendered as a regular task (with its underscores visible), not as a native section divider. The user can swap a dummy for a real heading manually via the Things UI (`File > New Heading`) at any time; the MCP recognises both forms going forward.
+
+#### Where the workaround fails
+
+- Native-heading rename/delete still requires AppleScript (step 5).
+- Dummy headings can be inadvertently completed by the user from the Things UI, which moves them to the Logbook. The MCP should treat completed dummy-heading tasks the same way Things would — as "gone."
+- Headings inside an `add-project` JSON payload (creating a new project with native headings at birth) ARE supported by the URL scheme. `propose_add_project` will use the JSON endpoint when the input includes a `headings` array — no dummy fallback needed there.
 
 ---
 
@@ -268,13 +294,20 @@ What the URL scheme *does* support:
 
 **Step 4 (next) — remaining `propose_*` tools + direct shortcuts + auto-confirm:**
 1. Direct shortcuts: `add_today_todo`, `add_anytime_todo`, `add_someday_todo` (mirror V1 `add_inbox_todo` pattern).
-2. `THINGS_MCP_AUTO_CONFIRM` env flag + never-bypass list for destructive kinds.
-3. `propose_update_todo` (first non-add handler — establishes the "before-state snapshot for undo" pattern).
-4. `propose_move_todo` (between lists / into projects via URL scheme `update?list=` / `list-id=`).
-5. `propose_complete_todo` (URL scheme `update?completed=true`; undo = `update?completed=false`).
+2. `complete_todo(todo_id)` direct (single-target, reversible). Undo = `update?completed=false`.
+3. `THINGS_MCP_AUTO_CONFIRM` env flag + never-bypass list for destructive kinds.
+4. `propose_update_todo` (first non-add handler — establishes the "before-state snapshot for undo" pattern).
+5. `propose_move_todo` (between lists / into projects via URL scheme `update?list=` / `list-id=`).
 6. `propose_delete_todo` — soft-delete (URL scheme `update?canceled=true&completed=true`). Undo restores via `update?canceled=false&completed=false`.
-7. `propose_add_project`, `propose_update_project` — URL scheme `add-project` / `update-project` (requires `THINGS_AUTH_TOKEN` for update).
-8. `propose_bulk_*` — batch wrappers. Always require explicit confirm.
+7. `propose_add_project`, `propose_update_project` — URL scheme `add-project` / `update-project` (requires `THINGS_AUTH_TOKEN` for update). `add_project` supports a `headings: [...]` array routed through `things:///json` for native heading creation at project birth.
+8. `propose_bulk_*` (delete / complete / move / update) — batch wrappers. Always require explicit confirm regardless of `THINGS_MCP_AUTO_CONFIRM`.
+
+**Step 4b — dummy-heading interim layer (URL scheme only):**
+1. `propose_add_heading(project_id, name, after_todo_id?)` → creates a `__NAME__` task at the requested position.
+2. `propose_update_heading(heading_id_or_name, new_name)` → renames a dummy via `update?title=...`.
+3. `propose_delete_heading(heading_id_or_name)` → soft-deletes a dummy.
+4. Extend `get_project(...)` and other read tools to surface dummy headings in a unified `headings` array alongside native ones.
+5. Document the visual caveat (dummies look like regular tasks in Things UI) in README + tool descriptions.
 
 **Step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT=1`):**
 1. `services/applescript.py` — thin `osascript` wrapper, async via `asyncio.to_thread`.
@@ -282,11 +315,12 @@ What the URL scheme *does* support:
 3. `propose_reorder_todos` — URL scheme can't do this; AppleScript-only.
 4. First-run permission popup is documented; `health()` reports `applescript_enabled` + `applescript_authorized`.
 
-**Step 6 — heading support (also AppleScript-dependent):**
-1. `propose_add_heading(project_id, name)` — AppleScript create.
-2. `propose_update_heading(heading_id, fields)`.
-3. `add_todo_under_heading(...)` — uses URL scheme `heading=` param (existing headings only); when AppleScript is on, can auto-create.
-4. Heading-aware reads: extend `get_project(project_id)` to surface heading structure (already partly there via `things.py`).
+**Step 6 — native heading support (also AppleScript-dependent):**
+1. Upgrade `propose_add_heading` to use AppleScript when flag is set — creates a real Things native heading (not a dummy task). Dummies remain valid alongside.
+2. `propose_update_heading` upgrade — rename a native heading.
+3. `propose_delete_heading` upgrade — delete a native heading.
+4. `convert_dummy_to_native_heading(dummy_task_id)` — utility that creates a native heading at the dummy's position, moves any sub-tasks (if conventionally grouped), then deletes the dummy task.
+5. `add_todo_under_heading(...)` — uses URL scheme `heading=` param (existing headings only); when AppleScript is on, can auto-create.
 
 Verification expands at each step:
 - Each new handler gets a `test_handler_<kind>.py` with execute / undo / preview tests.

@@ -2,7 +2,28 @@
   "permissions": {
     "allow": [
       "Bash(uv run *)",
-      "Bash(uv sync *)"
+      "Bash(uv sync *)",
+      "Bash(echo \"EXIT:$?\")",
+      "mcp__things-mcp__health",
+      "mcp__things-mcp__propose_add_todo",
+      "mcp__things-mcp__confirm_action",
+      "mcp__things-mcp__recent_undo_log",
+      "mcp__e449714a-f159-434d-96ef-84f9c6f27afa__web_search_exa",
+      "Bash(open \"things:///add?title=Direct%20URL%20test%20today&when=today\")",
+      "Bash(pip show *)",
+      "mcp__things-mcp__list_today",
+      "mcp__things-mcp__list_inbox",
+      "Bash(cat /tmp/things-mcp-launch.log 2>/dev/null || echo \"FILE NOT FOUND — debug write didn't execute\")",
+      "mcp__things-mcp__list_anytime",
+      "mcp__things-mcp__list_someday",
+      "mcp__things-mcp__get_projects",
+      "mcp__things-mcp__undo",
+      "mcp__things-mcp__list_logbook",
+      "Bash(git -C /Users/Shared/things-mcp status)",
+      "Bash(git -C /Users/Shared/things-mcp log --oneline -5)",
+      "Bash(git config *)",
+      "Bash(git -C /Users/Shared/things-mcp diff --stat HEAD)",
+      "Bash(git -C /Users/Shared/things-mcp ls-files --others --exclude-standard)"
     ]
   }
 }

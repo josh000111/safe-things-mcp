@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from . import add_todo
+from . import add_todo, complete_todo
 
 
 class Handler(Protocol):
@@ -37,6 +37,7 @@ class Handler(Protocol):
 
 REGISTRY: dict[str, Handler] = {
     add_todo.KIND: add_todo,  # type: ignore[dict-item]
+    complete_todo.KIND: complete_todo,  # type: ignore[dict-item]
 }
 
 
