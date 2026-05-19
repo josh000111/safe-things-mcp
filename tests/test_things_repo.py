@@ -1,7 +1,7 @@
 """Unit tests for things_repo helpers that don't require the live Things DB.
 
 The full read-layer tests need a real ``main.sqlite`` and Things app; those
-remain in ``manual_checklist.md`` for now. Here we only cover pure helpers
+remain in ``things-mcp-manual-verification.md`` for now. Here we only cover pure helpers
 that can be exercised by monkey-patching ``things.inbox``.
 """
 from __future__ import annotations

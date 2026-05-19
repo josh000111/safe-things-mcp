@@ -23,7 +23,7 @@ Overrides the global ask-before-complete fallback. Before claiming a task done:
 1. `uv run pytest` — all green (or state clearly that no tests cover the change).
 2. `uv run things-mcp --help` runs without error.
 3. `health()` returns `things_db_path`, `things_app_running=true`, `things_py_version`, `state_db_exists=true`.
-4. Write-path / URL-scheme changes: run relevant items from `tests/manual_checklist.md` as the `Test` user.
+4. Write-path / URL-scheme changes: run relevant items from `tests/things-mcp-manual-verification.md` as the `Test` user.
 5. V2 destructive ops: undo round-trip proven.
 
 If a step can't run in the current environment, say so explicitly — never silently skip.

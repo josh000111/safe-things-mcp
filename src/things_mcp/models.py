@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ChecklistItemInput(BaseModel):
@@ -72,6 +72,66 @@ class ProposeAddTodoInput(BaseModel):
     deadline: str | None = Field(default=None, description="ISO date YYYY-MM-DD.")
     tags: list[str] | None = None
     checklist: list[str] | None = None
+
+
+class ProposeUpdateTodoInput(BaseModel):
+    """V2 — propose updating fields on an existing to-do.
+
+    Convention: ``None`` means "don't change". Empty string ``""`` clears
+    a string field (notes / deadline). Empty list ``[]`` clears all tags.
+    Pass at least one updatable field.
+
+    ``when`` is intentionally absent from the first cut — restoring
+    scheduling cleanly requires a richer mapping and is scheduled for a
+    follow-up.
+    """
+    todo_id: str = Field(..., min_length=1)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    notes: str | None = None
+    deadline: str | None = Field(
+        default=None,
+        description="ISO date YYYY-MM-DD, or '' to clear.",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="List of tag names; [] clears all tags.",
+    )
+
+    @model_validator(mode="after")
+    def _require_at_least_one_field(self) -> "ProposeUpdateTodoInput":
+        if self.title is None and self.notes is None and self.deadline is None and self.tags is None:
+            raise ValueError(
+                f"propose_update_todo for {self.todo_id!r} has no fields to update. "
+                "Pass at least one of: title, notes, deadline, tags."
+            )
+        return self
+
+
+class ProposeMoveTodoInput(BaseModel):
+    """V2 — propose moving a to-do to a different list or project.
+
+    ``target`` accepts:
+
+    * ``"today"`` / ``"anytime"`` / ``"someday"`` — scheduling move
+      (preserves project/area membership).
+    * A 22-char Things UUID — project/area membership change.
+    * Other strings are rejected with an actionable hint.
+
+    Specific-date moves and move-to-Inbox are deferred to a follow-up.
+    """
+    todo_id: str = Field(..., min_length=1)
+    target: str = Field(..., min_length=1)
+
+
+class ProposeDeleteTodoInput(BaseModel):
+    """V2 — propose soft-deleting a to-do (mark canceled + completed →
+    moves to Logbook). Hard-delete (AppleScript) arrives in step 5.
+
+    This kind is in ``NEVER_BYPASS_KINDS`` — even with
+    ``THINGS_MCP_AUTO_CONFIRM=1`` the user must explicitly call
+    ``confirm_action``.
+    """
+    todo_id: str = Field(..., min_length=1)
 
 
 class HealthReport(BaseModel):

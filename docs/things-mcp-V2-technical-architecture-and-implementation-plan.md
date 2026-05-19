@@ -11,9 +11,9 @@
 | V2 step 1 — `pending_actions` + `undo_log` CRUD + tests | ✅ Done |
 | V2 step 2 — handler registry + `confirm_action` / `cancel_action` / `list_pending_actions` / `undo` | ✅ Done |
 | V2 step 3 — first `propose_*` (`propose_add_todo`) + round-trip undo test | ✅ Done; **awaiting manual write-path verification on Test user** |
-| V2 step 4 chunk A — direct shortcuts (`add_today/anytime/someday_todo`, `complete_todo`) + `upcoming` rejection | ✅ Done (90 tests passing); **awaiting manual verification on Test user** |
-| V2 step 4 chunk B — `THINGS_MCP_AUTO_CONFIRM` flag + `propose_update_todo` | ⏳ Next |
-| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ⏳ |
+| V2 step 4 chunk A — direct shortcuts (`add_today/anytime/someday_todo`, `complete_todo`) + `upcoming` rejection | ✅ Done, manually verified |
+| V2 step 4 chunk B — `THINGS_MCP_AUTO_CONFIRM` flag + `propose_update_todo` | ✅ Done, manually verified |
+| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done (134 tests passing); **awaiting manual verification on Test user** |
 | V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ⏳ |
 | V2 step 4 chunk E — `propose_bulk_*` tools | ⏳ |
 | V2 step 4b — dummy-heading interim layer (URL-scheme only) | ⏳ Bundled with step 4 |
@@ -325,7 +325,7 @@ Visual caveat: a `__COOKING__` task in the Things UI is rendered as a regular ta
 Verification expands at each step:
 - Each new handler gets a `test_handler_<kind>.py` with execute / undo / preview tests.
 - Each new propose tool gets a round-trip test in `test_dispatcher.py`.
-- Each new manual checklist item appended to `tests/manual_checklist.md`.
+- Each new manual checklist item appended to `tests/things-mcp-manual-verification.md`.
 
 ### Phase 3 — Hardening
 
@@ -388,7 +388,7 @@ V1 is "done" when each of these passes:
 9. **No accidental Inbox bypass** — Attempt to call the URL builder with a non-Inbox list in V1; assert it raises before launching.
 10. **State DB isolation** — Delete `~/.things-mcp/state.db`; server recreates it cleanly on next start.
 
-Each test gets one line in a `tests/manual_checklist.md` initially, then we promote them to `pytest` cases as the helpers stabilise.
+Each test gets one line in `tests/things-mcp-manual-verification.md` initially, then we promote them to `pytest` cases as the helpers stabilise.
 
 ---
 

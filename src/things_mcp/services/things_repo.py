@@ -79,6 +79,18 @@ def get(uuid: str) -> dict[str, Any] | None:
     return things.get(uuid, **_kw())
 
 
+def get_todo(uuid: str) -> dict[str, Any] | None:
+    """Return the full to-do row INCLUDING tags.
+
+    ``things.get()`` omits the ``tags`` field; ``things.tasks(uuid)`` returns
+    it (as a list of tag-name strings) when the task has tags, or omits the
+    key entirely otherwise. Update-flavour handlers use this to snapshot
+    before-state with tag fidelity.
+    """
+    row = things.tasks(uuid, **_kw())
+    return row if isinstance(row, dict) else None
+
+
 def find_recent_inbox_by_title(title: str, created_after: str) -> dict[str, Any] | None:
     """Return the newest Inbox to-do with this title created at-or-after a Things
     ``created`` timestamp (``YYYY-MM-DD HH:MM:SS`` local-naive). Used by the

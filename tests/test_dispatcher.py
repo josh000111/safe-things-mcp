@@ -71,26 +71,27 @@ def fake_things(monkeypatch):
 # ---------- propose ----------
 
 
-def test_propose_enqueues_action(fake_things):
-    out = propose_add_todo(title="Hello", list_id="today")
+async def test_propose_enqueues_action(fake_things):
+    out = await propose_add_todo(title="Hello", list_id="today")
     assert "action_id" in out
     assert "Hello" in out["preview"]
     assert "today" in out["preview"]
     assert "next_step" in out
+    assert out["auto_confirmed"] is False
 
     rows = pending.list_all()
     assert len(rows) == 1
     assert rows[0]["kind"] == "add_todo"
 
 
-def test_propose_validates_empty_title(fake_things):
+async def test_propose_validates_empty_title(fake_things):
     with pytest.raises(Exception):
-        propose_add_todo(title="", list_id="inbox")
+        await propose_add_todo(title="", list_id="inbox")
 
 
-def test_propose_does_not_touch_things(fake_things):
+async def test_propose_does_not_touch_things(fake_things):
     """Critical safety property: propose enqueues only — no launch happens."""
-    propose_add_todo(title="Hello", list_id="inbox")
+    await propose_add_todo(title="Hello", list_id="inbox")
     assert fake_things == {}  # no task created
 
 
@@ -98,7 +99,7 @@ def test_propose_does_not_touch_things(fake_things):
 
 
 async def test_confirm_full_flow(fast_polling, fake_things):
-    proposed = propose_add_todo(title="Confirmed task", list_id="inbox")
+    proposed = await propose_add_todo(title="Confirmed task", list_id="inbox")
     action_id = proposed["action_id"]
 
     confirmed = await confirm_action(action_id)
@@ -122,7 +123,7 @@ async def test_confirm_missing_action_raises():
 async def test_confirm_expired_action_raises(fake_things, monkeypatch):
     monkeypatch.setattr(config, "PENDING_TTL_SECONDS", -1)
     monkeypatch.setattr(pending, "PENDING_TTL_SECONDS", -1)
-    proposed = propose_add_todo(title="Will expire", list_id="inbox")
+    proposed = await propose_add_todo(title="Will expire", list_id="inbox")
     # sweep_expired() inside confirm_action will catch it and raise as missing.
     with pytest.raises(ValueError, match="expired|No pending"):
         await confirm_action(proposed["action_id"])
@@ -131,8 +132,8 @@ async def test_confirm_expired_action_raises(fake_things, monkeypatch):
 # ---------- cancel ----------
 
 
-def test_cancel_removes_pending_row(fake_things):
-    proposed = propose_add_todo(title="to-cancel", list_id="inbox")
+async def test_cancel_removes_pending_row(fake_things):
+    proposed = await propose_add_todo(title="to-cancel", list_id="inbox")
     out = cancel_action(proposed["action_id"])
     assert out["cancelled"] is True
     assert pending.get(proposed["action_id"]) is None
@@ -143,8 +144,8 @@ def test_cancel_missing_action_raises():
         cancel_action("nope")
 
 
-def test_cancel_does_not_touch_things(fake_things):
-    proposed = propose_add_todo(title="x", list_id="inbox")
+async def test_cancel_does_not_touch_things(fake_things):
+    proposed = await propose_add_todo(title="x", list_id="inbox")
     cancel_action(proposed["action_id"])
     assert fake_things == {}
 
@@ -152,9 +153,9 @@ def test_cancel_does_not_touch_things(fake_things):
 # ---------- list_pending_actions ----------
 
 
-def test_list_pending_actions_returns_all(fake_things):
-    a = propose_add_todo(title="A", list_id="inbox")
-    b = propose_add_todo(title="B", list_id="today")
+async def test_list_pending_actions_returns_all(fake_things):
+    a = await propose_add_todo(title="A", list_id="inbox")
+    b = await propose_add_todo(title="B", list_id="today")
     rows = list_pending_actions()
     ids = {r["id"] for r in rows}
     assert ids == {a["action_id"], b["action_id"]}
@@ -167,7 +168,7 @@ async def test_full_round_trip_add_then_undo(fast_polling, fake_things, monkeypa
     """The V2 acceptance gate: round-trip undo must succeed."""
     monkeypatch.setattr(config, "THINGS_AUTH_TOKEN", "tok-xyz")
 
-    proposed = propose_add_todo(title="Round trip", list_id="inbox")
+    proposed = await propose_add_todo(title="Round trip", list_id="inbox")
     confirmed = await confirm_action(proposed["action_id"])
     new_uuid = confirmed["result"]["id"]
     assert fake_things[new_uuid]["status"] == "incomplete"
@@ -193,7 +194,7 @@ async def test_undo_with_unknown_id_raises():
 
 async def test_undo_by_explicit_id(fast_polling, fake_things, monkeypatch):
     monkeypatch.setattr(config, "THINGS_AUTH_TOKEN", "tok")
-    proposed = propose_add_todo(title="Pick by id", list_id="inbox")
+    proposed = await propose_add_todo(title="Pick by id", list_id="inbox")
     confirmed = await confirm_action(proposed["action_id"])
     undo_id = confirmed["result"]["undo_id"]
 
