@@ -31,6 +31,17 @@ Sanity check:
 uv run things-mcp --help    # FastMCP help, or stdio if no flags
 ```
 
+## First-run setup
+
+Read-only tools work immediately. Any mutating tool (update / move / delete / project ops) needs an auth token:
+
+1. Things → Settings → General → **Enable Things URLs** (toggle on if not already).
+2. Click **Manage**, copy the token.
+3. Add it to your MCP client's env block as `THINGS_AUTH_TOKEN`.
+4. Restart the client.
+
+Verify with: ask the agent *"call health()"* → `url_scheme_auth_token_set: true`.
+
 ## Tools (V1)
 
 **Read** — `list_inbox`, `list_today`, `list_upcoming`, `list_anytime`,
@@ -54,7 +65,10 @@ The server speaks MCP over stdio. Point any client at
   "mcpServers": {
     "things": {
       "command": "uv",
-      "args": ["--directory", "/absolute/path/to/things-mcp", "run", "things-mcp"]
+      "args": ["--directory", "/absolute/path/to/things-mcp", "run", "things-mcp"],
+      "env": {
+        "THINGS_AUTH_TOKEN": "paste-token-here"
+      }
     }
   }
 }
@@ -63,12 +77,12 @@ The server speaks MCP over stdio. Point any client at
 ### Claude Code — `~/.config/claude-code/mcp.json` (or `claude mcp add`)
 
 ```bash
-claude mcp add things -- uv --directory /absolute/path/to/things-mcp run things-mcp
+claude mcp add things -e THINGS_AUTH_TOKEN=paste-token-here -- uv --directory /absolute/path/to/things-mcp run things-mcp
 ```
 
 ### Cursor — Settings → MCP → Add Server
 
-Use the same command/args as Claude Desktop.
+Use the same command/args as Claude Desktop, and add an `env` block with `THINGS_AUTH_TOKEN` set to your token.
 
 ## Environment
 
@@ -77,7 +91,7 @@ Use the same command/args as Claude Desktop.
 | `THINGS_DB_PATH` | Things default path | Override read DB location. |
 | `THINGS_MCP_STATE_DIR` | `~/.things-mcp` | Where `state.db` lives. |
 | `THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for the URL-scheme callback. |
-| `THINGS_AUTH_TOKEN` | unset | V2 only (mutating updates). |
+| `THINGS_AUTH_TOKEN` | unset | Required for every mutating tool (update / move / delete / project ops / bulk_*). Read tools and add_inbox_todo / add_today_todo / add_anytime_todo / add_someday_todo don't need it. See First-run setup above. |
 
 ## Architecture
 
@@ -92,5 +106,12 @@ See `plans/` (private) for the full design. Short version:
 
 ## Status
 
-V1 done = read + Inbox-create end-to-end. V2 = full-parity writes behind a
-two-phase propose/confirm gate with an undo log.
+V1 done = read + Inbox-create end-to-end. V2 chunks A–E have shipped behind
+propose/confirm + undo: direct shortcuts (`add_today/anytime/someday_todo`,
+`complete_todo`), `propose_update_todo`, `propose_move_todo`,
+`propose_delete_todo`, `propose_add_project`, `propose_update_project`, and the
+`propose_bulk_*` family. Chunks D and E are awaiting Round-4 manual
+verification on the Test user. Remaining: opt-in AppleScript layer for
+hard-delete / reorder and native heading support. See
+`docs/things-mcp-V2-technical-architecture-and-implementation-plan.md` §0 for
+the authoritative status table.
