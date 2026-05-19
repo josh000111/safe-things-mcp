@@ -23,7 +23,14 @@
       "Bash(git -C /Users/Shared/things-mcp log --oneline -5)",
       "Bash(git config *)",
       "Bash(git -C /Users/Shared/things-mcp diff --stat HEAD)",
-      "Bash(git -C /Users/Shared/things-mcp ls-files --others --exclude-standard)"
+      "Bash(git -C /Users/Shared/things-mcp ls-files --others --exclude-standard)",
+      "Bash(echo \"exit: $?\")",
+      "mcp__things-mcp__propose_update_todo",
+      "Bash(ls ~/.claude/projects/ | head -20)",
+      "Bash(xargs ls -t)",
+      "Bash(xargs '-I{}' sh -c ' *)",
+      "Bash(mkdir -p /Users/Shared/things-mcp/.claude)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

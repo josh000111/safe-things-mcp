@@ -15,6 +15,27 @@ THINGS_DB_PATH = Path(
 
 THINGS_AUTH_TOKEN = os.environ.get("THINGS_AUTH_TOKEN")
 
+# When set, ``propose_*`` tools immediately execute their action in the
+# same call instead of enqueueing for a separate confirm round-trip. The
+# preview is still returned (so the agent can summarise to the user).
+# Destructive / multi-target kinds in NEVER_BYPASS_KINDS ignore this flag
+# and ALWAYS require an explicit ``confirm_action(...)``.
+AUTO_CONFIRM = os.environ.get("THINGS_MCP_AUTO_CONFIRM", "").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+
+# Action kinds that must NEVER auto-confirm, regardless of THINGS_MCP_AUTO_CONFIRM.
+# Anything destructive or multi-target lives here. New kinds added in later
+# chunks (chunk C delete, chunk E bulk_*) are pre-listed so the gate is in
+# place when those handlers ship.
+NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
+    "delete_todo",
+    "bulk_delete",
+    "bulk_complete",
+    "bulk_move",
+    "bulk_update",
+})
+
 WRITE_POLL_TIMEOUT_SECONDS = float(
     os.environ.get(
         "THINGS_MCP_WRITE_POLL_TIMEOUT",

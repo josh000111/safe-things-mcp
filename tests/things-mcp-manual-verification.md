@@ -1,0 +1,128 @@
+# things-mcp — manual verification checklist
+
+Live-app verification against Things 3 on macOS. Items here cover behaviour the automated pytest suite can't reach: real URL-scheme launches, the Things UI state, the Logbook, Cloud Sync interaction, AppleScript permission dialogs, etc.
+
+**Run from an MCP client** (Claude Desktop / Claude Code / Cursor) **on the `Test` macOS user account** — never `joshsmith`. The project [CLAUDE.md](../CLAUDE.md) hard rule applies: `whoami` first; the `Test` user has its own isolated Things 3 install and its own Things Cloud account, so nothing here can touch real data.
+
+Sections are numbered cumulatively in build order. V1 (1–10) → V2 step 1–3 (11–28) → step 4 Chunk A (29–38) → Chunk B (39–52) → Chunk C (53–66) → and so on.
+
+---
+
+## V1 — Read + Inbox-create
+
+1. **Read smoke** — `list_inbox()` titles match the Things UI.
+2. **Read depth** — `get_projects(area_id=...)` then `get_project(project_id)` returns the project's headings + items, matching the UI.
+3. **Write happy path** — `add_inbox_todo(title='MCP test 1')` returns an `id`; task appears in the Inbox within ~1s and shows up in a follow-up `list_inbox()` call.
+4. **Write edge cases** — title with emoji, `"`, `&`, multi-line notes, `tags=['a','b']`, `checklist=['x','y','z']`, `when='today'`, `deadline='2026-12-31'`. All round-trip correctly.
+5. **Callback timeout** — Quit Things, call `add_inbox_todo`. Expect a clean error within `THINGS_MCP_CALLBACK_TIMEOUT` seconds (default 5), not a hang.
+6. **Concurrent reads** — Edit a task in the Things UI while calling `get_todo(id)`. No DB lock errors.
+7. **Cross-client** — Repeat (1) and (3) from a second MCP client. Identical results.
+8. **Schema check** — `health()` reports `things_db_path`, `things_app_running=true`, `things_py_version`.
+9. **No Inbox bypass** — Internal: `services.url_scheme.build_add_url(list_id='today', ...)` raises `ValueError`.
+10. **State DB isolation** — `rm ~/.things-mcp/state.db`; restart server; `health()` shows `state_db_exists=true` again.
+
+# V2 manual verification checklist (steps 1–3 only)
+
+These must run as the **Test** user, not the main `joshsmith` account. Per CLAUDE.md: `whoami` first. If the session needs to touch the real DB, run `backup_things3.sh` and confirm a fresh `.thingsdatabase` backup landed in `~/Documents/Things DB Backups (Cultured Code)/`.
+
+### Propose → cancel
+11. **Propose preview** — `propose_add_todo(title='V2 cancel-me', list_id='today')` returns `{action_id, preview, expires_at, next_step}`. No task appears in Things.
+12. **Cancel drops it** — `cancel_action(action_id)` returns `{cancelled: true}`. `list_pending_actions()` is empty. Still no task in Things.
+
+### Propose → confirm (each target list)
+13. **Inbox** — propose then confirm `list_id='inbox'`. Task appears in Inbox, `id` is returned, `recent_undo_log()` shows a new `add_todo` row.
+14. **Today** — propose then confirm `list_id='today'`. Task appears under Today.
+15. **Anytime / Someday** — same with `list_id='anytime'` and `list_id='someday'`.
+16. **Project UUID** — pick a real project UUID from `get_projects()`. Propose with that as `list_id`; task lands under the project.
+
+### Propose → confirm with full payload
+17. **All fields populated** — propose with `notes`, `when='today'`, `deadline=<future>`, `tags=['a','b']`, `checklist=['x','y']`. Confirm and verify the task in Things has all metadata.
+
+### Pending action lifecycle
+18. **List pending** — `propose_add_todo` twice without confirming. `list_pending_actions()` returns both rows, newest first.
+19. **TTL expiry** — propose, wait 5 minutes 30 seconds, call `confirm_action(action_id)`. Expect a "Pending action … expired" error and the row swept.
+
+### Undo round-trip — REQUIRES `THINGS_AUTH_TOKEN`
+20. **Token check** — export `THINGS_AUTH_TOKEN=<token from Things → Settings → General → Enable Things URLs → Manage>`. Restart the MCP server. `health().url_scheme_auth_token_set == true`.
+21. **Undo most recent** — propose + confirm a task. Call `undo()` with no args. Returns `{undone: true, note: 'Soft-undo: …'}`. Task is now status=`completed` / `canceled` and no longer in active lists (visible in Logbook).
+22. **Undo by id** — same flow but call `undo(undo_id=<id from recent_undo_log()>)`.
+23. **Undo with no history** — fresh state, call `undo()`. Expect "No reversible actions" error.
+24. **Undo without auth token** — unset `THINGS_AUTH_TOKEN`, restart, propose + confirm, then call `undo()`. Expect actionable error pointing to the Settings path.
+
+### Cross-cutting safety
+25. **No-bypass regression** — internal: `services.url_scheme.build_add_url(list_id='today', ...)` *still* raises `ValueError` (V1 guard intact). `build_add_url_v2(list_id='today', ...)` does not.
+26. **State persists across restarts** — propose without confirming; restart the MCP server; `list_pending_actions()` still returns it (within TTL).
+27. **Concurrent V2 + V1** — `propose_add_todo(list_id='inbox')` *then* `add_inbox_todo(title='x')` *then* `confirm_action(action_id from step 1)`. All three succeed; both Inbox tasks present.
+28. **Pre-mutation undo_log row** — kill the Things app between `propose_add_todo` and `confirm_action`, then call confirm. Expect the timeout error, but `recent_undo_log()` should still show an `add_todo` row with `target_uuid=null` — the forensic breadcrumb.
+
+# V2 manual verification checklist — Step 4 Chunk A (direct shortcuts + complete_todo)
+
+Same ground rules: must run as the **Test** user. `whoami` first. Restart Claude Desktop to reload the MCP server after pulling the new code.
+
+### Direct add shortcuts (no airlock)
+29. **`add_today_todo`** — ask: *"Use add_today_todo to add a task titled 'V2-chunkA today' to my Today list."* Task appears in Today within ~1s. `recent_undo_log()` shows a new `add_todo` row with the new UUID. (Note: V2 direct adds DO write undo log rows, unlike V1 `add_inbox_todo`.)
+30. **`add_anytime_todo`** — same with title `'V2-chunkA anytime'`. Task appears under Anytime.
+31. **`add_someday_todo`** — same with title `'V2-chunkA someday'`. Task appears under Someday.
+32. **Undo a direct add** — after task 29 lands, ask: *"Undo the most recent action."* Task disappears from Today, lands in Logbook with `canceled` status. `recent_undo_log()` is one row shorter.
+
+### `complete_todo` (single-target direct) — REQUIRES `THINGS_AUTH_TOKEN`
+33. **Token check** — `health().url_scheme_auth_token_set == true`. If not, set `THINGS_AUTH_TOKEN` in Claude Desktop config and restart.
+34. **Complete a real task** — first ask: *"List my Inbox so I can pick a task to complete."* Pick one. Ask: *"Call complete_todo with id `<uuid>`."* Verify in Things: task is now ticked / strikethrough, moves to Logbook within a second.
+35. **Undo the completion** — call `undo()`. Task returns to its original state (incomplete, back in its list). `recent_undo_log()` is shorter.
+36. **`complete_todo` on a missing id** — ask: *"Call complete_todo with id 'this-uuid-does-not-exist'."* Expect a clean error: *"No to-do found with id…"*. No mutation should land.
+
+### `upcoming` rejection (code-level safety net)
+37. **Internal check** — ask Claude Code: *"Run `uv run python -c 'from things_mcp.services import url_scheme; url_scheme.build_add_url_v2(title=\"t\", list_id=\"upcoming\")'`."* Expect a `ValueError` with the message containing "computed view in Things" and pointing at `when='<future date>'`. (This is the bug flagged at the end of step 1–3 verification.)
+38. **Propose to Upcoming via the agent** — ask: *"Propose adding 'V2-chunkA upcoming test' to my Upcoming list."* The agent's call should bubble up the `ValueError` cleanly. (If it silently succeeds with `list-id=upcoming`, the bug is back — file a report.)
+
+# V2 manual verification checklist — Step 4 Chunk B (`propose_update_todo` + `THINGS_MCP_AUTO_CONFIRM`)
+
+Same ground rules: **Test** user only. Restart Claude Desktop to pick up the new code. `THINGS_AUTH_TOKEN` must be set (every test below uses `update`).
+
+### `propose_update_todo` — basic edits
+39. **Update a title** — first ask the agent to *"List my Inbox and pick a task id"*. Then: *"Propose updating to-do `<uuid>` to title 'V2-chunkB updated title', then confirm."* In Things, that task's title now shows the new value. `recent_undo_log()` shows an `update_todo` row.
+40. **Update notes** — pick a task. *"Propose updating to-do `<uuid>` so notes='new notes from MCP', then confirm."* Open the task in Things — notes field replaced.
+41. **Update deadline** — pick a task. *"Propose updating to-do `<uuid>` so deadline='2026-12-31', then confirm."* Things shows the new deadline badge.
+42. **Update tags** — pick a task that has some tags. *"Propose updating to-do `<uuid>` so tags=['MCP-test'], then confirm."* (Assumes the tag 'MCP-test' exists. Otherwise pick one of your real tags.) Task now has only that tag.
+43. **Clear a field** — pick a task with notes. *"Propose updating to-do `<uuid>` so notes='', then confirm."* Notes field empty in Things.
+44. **Clear all tags** — pick a tagged task. *"Propose updating to-do `<uuid>` so tags=[], then confirm."* Task has no tags.
+45. **Refuse empty proposal** — *"Propose updating to-do `<uuid>` (no fields specified)."* Expect a clean ValueError about needing at least one field. (You may need to phrase this as "propose update with only the todo_id" depending on how the agent interprets your request.)
+
+### Undo of `propose_update_todo`
+46. **Undo restores the original title** — propose+confirm a title change as in #39, then `undo()`. Old title comes back in Things. `recent_undo_log()` shrinks by 1.
+47. **Undo only touches changed fields** — propose+confirm a title change. Before calling undo, manually edit the task's NOTES in the Things UI (any change). Then `undo()`. After undo: title is restored to original, but YOUR manual notes edit survives intact. **This is the load-bearing property — verify carefully.**
+
+### `THINGS_MCP_AUTO_CONFIRM` flag
+48. **Off → propose just enqueues** — confirm `THINGS_MCP_AUTO_CONFIRM` is NOT set in your Claude Desktop config. Ask: *"Propose adding 'V2-chunkB autoconfirm-off' to my Inbox."* Response has `auto_confirmed: False`. No task in Things. Cancel via `cancel_action`.
+49. **On → propose runs inline** — add `"THINGS_MCP_AUTO_CONFIRM": "1"` to the things-mcp `env` block in `claude_desktop_config.json`. Restart Claude Desktop. Ask: *"Propose adding 'V2-chunkB autoconfirm-on' to my Inbox."* Response has `auto_confirmed: True` AND a `result` field containing the new task id. Task IS in Things — no separate confirm call needed.
+50. **On + never-bypass kind** (placeholder until chunk C ships delete) — verify the wiring is correct via code inspection only. Ask Claude Code (in dev): *"Run `uv run python -c 'from things_mcp import config; print(config.NEVER_BYPASS_KINDS)'`."* Expected output: `frozenset({'delete_todo', 'bulk_delete', 'bulk_complete', 'bulk_move', 'bulk_update'})`. Full runtime test of never-bypass behaviour comes with chunk C.
+51. **On + handler fails** — with auto-confirm still on, force a failure: temporarily set `THINGS_AUTH_TOKEN=` (empty) in the config, restart, then propose an `update_todo` (which needs auth). Expect a RuntimeError about the missing token AND a leftover pending row visible via `list_pending_actions`. Restore the real token afterward.
+
+### Tear-down
+52. **Remove `THINGS_MCP_AUTO_CONFIRM`** from your Claude Desktop config and restart. Default behaviour resumes.
+
+# V2 manual verification checklist — Step 4 Chunk C (`propose_move_todo` + `propose_delete_todo`)
+
+Same ground rules: **Test** user only. Restart Claude Desktop to reload. `THINGS_AUTH_TOKEN` must be set (both tools use `update`).
+
+### `propose_move_todo` — scheduling dimension
+53. **Move to Today** — *"List my Inbox, pick a task uuid, then propose moving it to today."* Confirm. In Things: task now appears in Today view. Its project membership (if any) is preserved.
+54. **Move to Anytime** — pick an Inbox task. *"Propose moving `<uuid>` to anytime."* Confirm. Task now under Anytime.
+55. **Move to Someday** — pick a task. *"Propose moving `<uuid>` to someday."* Confirm. Task under Someday.
+56. **Reject Inbox target** — *"Propose moving `<uuid>` to inbox."* Expect a ValueError mentioning "not supported in V2 first cut" with a hint that today/anytime/someday/UUID are the supported targets.
+57. **Reject Upcoming target** — *"Propose moving `<uuid>` to upcoming."* Expect the same actionable rejection.
+
+### `propose_move_todo` — project dimension
+58. **Move into a real project** — *"List my projects, pick one, then propose moving an Inbox task into project `<UUID>`."* Confirm. Task now appears inside that project in Things. Its scheduling (Today/Anytime/etc.) is preserved.
+59. **Move between projects** — pick a task that's already in a project. Propose moving it to a different project UUID. Confirm. Task now under the new project, no longer under the old one.
+
+### Undo of `propose_move_todo`
+60. **Undo a scheduling move** — propose+confirm a today move as in #53. Call `undo()`. Task returns to its original list (Inbox/Anytime/wherever). **Critical:** if you manually edited the task's TITLE in Things between confirm and undo, that title edit must survive — undo only restores the scheduling dimension.
+61. **Undo a project move** — propose+confirm #58 (move to project). Call `undo()`. Task returns to its original project (or to no-project if it had none). Verify in Things.
+
+### `propose_delete_todo` (soft-delete) — REQUIRES explicit confirm even with AUTO_CONFIRM=1
+62. **Soft-delete a task** — pick an expendable inbox task you can lose. *"Propose deleting `<uuid>`."* Response shows the preview ("Soft-delete to-do … moves to Logbook"). Call `confirm_action`. In Things: task no longer in Inbox; appears in Logbook with strikethrough/canceled badge.
+63. **Undo the soft-delete** — call `undo()` after #62. Task returns to Inbox (or wherever it was), status incomplete. `recent_undo_log()` is one row shorter.
+64. **Refuse to delete an already-canceled task** — pick a task already in your Logbook (status canceled or completed). *"Propose deleting `<that uuid>`."* Expect an actionable error ("already status canceled/completed"), no mutation.
+65. **AUTO_CONFIRM still won't bypass delete** — set `THINGS_MCP_AUTO_CONFIRM=1` in Claude Desktop config, restart. *"Propose deleting `<uuid of a throwaway task>`."* Response has `auto_confirmed: False` and a note containing "never auto-confirmed". Task is **not** deleted — you have to call `confirm_action` explicitly. Unset AUTO_CONFIRM after.
+66. **AUTO_CONFIRM still works for safe kinds** — with AUTO_CONFIRM=1, *"Propose adding 'V2-chunkC autoconfirm-still-on' to Inbox."* Response has `auto_confirmed: True` and the result inline. Restore AUTO_CONFIRM off for the next chunks.

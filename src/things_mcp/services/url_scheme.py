@@ -125,9 +125,15 @@ def build_update_url(
     when: str | None = None,
     deadline: str | None = None,
     tags: list[str] | None = None,
+    list_id: str | None = None,
 ) -> str:
     """V2 ``things:///update`` URL. Requires ``auth_token`` (see Things →
-    Settings → General → Enable Things URLs → Manage)."""
+    Settings → General → Enable Things URLs → Manage).
+
+    ``list_id`` moves the task into a project/area by UUID. Pass ``""``
+    (empty string) to clear project/area membership (best-effort — Things
+    behaviour on empty ``list-id`` is documented as a follow-up gap).
+    """
     if not id:
         raise ValueError("id is required")
     if not auth_token:
@@ -152,6 +158,8 @@ def build_update_url(
         params.append(("deadline", deadline))
     if tags is not None:
         params.append(("tags", ",".join(tags)))
+    if list_id is not None:
+        params.append(("list-id", list_id))
 
     return "things:///update?" + urlencode(params, quote_via=quote)
 

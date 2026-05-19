@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__things-mcp__list_inbox",
+      "mcp__things-mcp__list_today",
+      "mcp__things-mcp__list_anytime",
+      "mcp__things-mcp__list_someday",
+      "mcp__things-mcp__list_upcoming",
+      "mcp__things-mcp__list_logbook",
+      "mcp__things-mcp__get_todo",
+      "mcp__things-mcp__get_projects",
+      "mcp__things-mcp__get_project",
+      "mcp__things-mcp__get_areas",
+      "mcp__things-mcp__get_tags",
+      "mcp__things-mcp__search",
+      "mcp__things-mcp__health",
+      "mcp__things-mcp__recent_undo_log",
+      "mcp__things-mcp__list_pending_actions",
+      "mcp__things-mcp__propose_add_todo",
+      "mcp__things-mcp__propose_update_todo",
+      "mcp__things-mcp__confirm_action",
+      "mcp__things-mcp__cancel_action",
+      "mcp__things-mcp__undo",
+      "mcp__things-mcp__add_inbox_todo",
+      "mcp__things-mcp__add_today_todo",
+      "mcp__things-mcp__add_anytime_todo",
+      "mcp__things-mcp__add_someday_todo",
+      "mcp__things-mcp__complete_todo"
+    ]
+  }
+}
