@@ -2,25 +2,25 @@
 
 > **Master copy.** This file lives at `/Users/Shared/things-mcp/docs/things-mcp-V2-technical-architecture-and-implementation-plan.md`. Edit here, not in `~/.claude/plans/`.
 
-## 0. Implementation Status (as of 2026-05-18)
+## 0. Implementation Status (as of 2026-05-19)
 
 | Phase | Status |
 | --- | --- |
 | V1 — Read + Inbox-create via URL scheme | ✅ Shipped, manually verified |
-| V1 — HTTP callback retired, DB polling in its place | ✅ Shipped (this session) |
+| V1 — HTTP callback retired, DB polling in its place | ✅ Shipped |
 | V2 step 1 — `pending_actions` + `undo_log` CRUD + tests | ✅ Done |
 | V2 step 2 — handler registry + `confirm_action` / `cancel_action` / `list_pending_actions` / `undo` | ✅ Done |
-| V2 step 3 — first `propose_*` (`propose_add_todo`) + round-trip undo test | ✅ Done; **awaiting manual write-path verification on Test user** |
+| V2 step 3 — first `propose_*` (`propose_add_todo`) + round-trip undo test | ✅ Done, manually verified |
 | V2 step 4 chunk A — direct shortcuts (`add_today/anytime/someday_todo`, `complete_todo`) + `upcoming` rejection | ✅ Done, manually verified |
 | V2 step 4 chunk B — `THINGS_MCP_AUTO_CONFIRM` flag + `propose_update_todo` | ✅ Done, manually verified |
-| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done (134 tests passing); **awaiting manual verification on Test user** |
-| V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ⏳ |
-| V2 step 4 chunk E — `propose_bulk_*` tools | ⏳ |
+| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done, manually verified (items 56/57 target-validation fix landed post-Round-3) |
+| V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ✅ Done (195 tests passing); **awaiting Round-4 manual verification on Test user** |
+| V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done (195 tests passing); **awaiting Round-4 manual verification on Test user** |
 | V2 step 4b — dummy-heading interim layer (URL-scheme only) | ⏳ Bundled with step 4 |
 | V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ After step 4 user feedback |
 | V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Bundled with step 5 |
 
-Automated suite: 67 tests, ~1s, hermetic (no real Things DB / URL launches).
+Automated suite: 195 tests, ~1.5s, hermetic (no real Things DB / URL launches).
 
 ## 1. Context
 

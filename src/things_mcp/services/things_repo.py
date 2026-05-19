@@ -107,6 +107,37 @@ def find_recent_inbox_by_title(title: str, created_after: str) -> dict[str, Any]
     return matches[0]
 
 
+def get_project_row(uuid: str) -> dict[str, Any] | None:
+    """Return the full project row INCLUDING tags.
+
+    Same pattern as :func:`get_todo` but constrained to ``type='project'``.
+    ``things.tasks(uuid, type='project')`` returns ``[]`` (not the row)
+    when the UUID doesn't refer to a project; treat that as not-found.
+    """
+    row = things.tasks(uuid, type="project", **_kw())
+    return row if isinstance(row, dict) else None
+
+
+def find_recent_project_by_title(title: str, created_after: str) -> dict[str, Any] | None:
+    """Like :func:`find_recent_by_title` but scoped to projects.
+
+    The add-project URL scheme doesn't return a UUID via callback (we
+    retired the HTTP listener; see arch doc §2 Q2). To recover the new
+    project's UUID we poll incomplete projects for a title + created
+    window match. Single-creation scale makes title collisions a
+    non-issue in practice (an existing project with the same title would
+    have an earlier ``created`` timestamp).
+    """
+    matches = [
+        p for p in things.tasks(type="project", status="incomplete", **_kw())
+        if p.get("title") == title and (p.get("created") or "") >= created_after
+    ]
+    if not matches:
+        return None
+    matches.sort(key=lambda p: p.get("created") or "", reverse=True)
+    return matches[0]
+
+
 def find_recent_by_title(title: str, created_after: str) -> dict[str, Any] | None:
     """Like :func:`find_recent_inbox_by_title` but scans every incomplete
     to-do across all lists. The URL-scheme call already routed the task to

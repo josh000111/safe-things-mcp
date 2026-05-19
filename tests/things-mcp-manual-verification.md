@@ -4,7 +4,7 @@ Live-app verification against Things 3 on macOS. Items here cover behaviour the 
 
 **Run from an MCP client** (Claude Desktop / Claude Code / Cursor) **on the `Test` macOS user account** — never `joshsmith`. The project [CLAUDE.md](../CLAUDE.md) hard rule applies: `whoami` first; the `Test` user has its own isolated Things 3 install and its own Things Cloud account, so nothing here can touch real data.
 
-Sections are numbered cumulatively in build order. V1 (1–10) → V2 step 1–3 (11–28) → step 4 Chunk A (29–38) → Chunk B (39–52) → Chunk C (53–66) → and so on.
+Sections are numbered cumulatively in build order. V1 (1–10) → V2 step 1–3 (11–28) → step 4 Chunk A (29–38) → Chunk B (39–52) → Chunk C (53–66) → Chunk D (67–84) → Chunk E (85–97) → and so on.
 
 ---
 
@@ -126,3 +126,64 @@ Same ground rules: **Test** user only. Restart Claude Desktop to reload. `THINGS
 64. **Refuse to delete an already-canceled task** — pick a task already in your Logbook (status canceled or completed). *"Propose deleting `<that uuid>`."* Expect an actionable error ("already status canceled/completed"), no mutation.
 65. **AUTO_CONFIRM still won't bypass delete** — set `THINGS_MCP_AUTO_CONFIRM=1` in Claude Desktop config, restart. *"Propose deleting `<uuid of a throwaway task>`."* Response has `auto_confirmed: False` and a note containing "never auto-confirmed". Task is **not** deleted — you have to call `confirm_action` explicitly. Unset AUTO_CONFIRM after.
 66. **AUTO_CONFIRM still works for safe kinds** — with AUTO_CONFIRM=1, *"Propose adding 'V2-chunkC autoconfirm-still-on' to Inbox."* Response has `auto_confirmed: True` and the result inline. Restore AUTO_CONFIRM off for the next chunks.
+
+# V2 manual verification checklist — Step 4 Chunk D (`propose_add_project` + `propose_update_project`)
+
+Same ground rules: **Test** user only. `whoami` first. Restart Claude Desktop to reload the MCP server. `THINGS_AUTH_TOKEN` must be set (`update_project` needs it; `add_project` undo needs it too).
+
+### `propose_add_project` — basic
+67. **Title-only project** — *"Propose adding a project titled 'V2-chunkD title-only'."* Confirm. New project appears in Things' Projects list within ~1s. `recent_undo_log()` shows an `add_project` row with the new project's UUID.
+68. **All optional fields** — *"List my areas, pick one uuid, then propose adding a project titled 'V2-chunkD all-fields' with that area_id, when='anytime', deadline='2026-12-31', notes='from MCP', tags=['MCP-test']."* Confirm. Open the new project — area, notes, deadline, and tag all present.
+69. **Schedule a project for Today** — *"Propose adding 'V2-chunkD today-project' with when='today'."* Confirm. Project appears in Today.
+
+### `propose_add_project` — native headings via `things:///json`
+70. **Headings at birth** — *"Propose adding a project titled 'V2-chunkD with-headings' with headings=['Design', 'Dev', 'QA']."* Confirm. Open the project in Things — there are THREE native section headings (rendered as dividers, NOT as `__DESIGN__`-style dummy tasks). The headings appear in the order Design → Dev → QA.
+71. **Headings + other fields together** — *"Propose adding 'V2-chunkD combo' with headings=['Planning','Execution'], notes='kickoff', deadline='2026-09-30'."* Confirm. Both headings present AND the notes/deadline fields populated.
+
+### `propose_add_project` — undo (soft-delete)
+72. **Undo a freshly-added project** — after #67 lands, call `undo()`. The project disappears from Projects and appears in the Logbook with canceled badge. `recent_undo_log()` shrinks by 1.
+73. **Undo without auth token** — temporarily unset `THINGS_AUTH_TOKEN` in Claude Desktop config, restart, repeat #67 + confirm, then call `undo()`. Expect a clean RuntimeError pointing at the Things → Settings → Manage URL. Restore the token after.
+
+### `propose_update_project` — basic edits
+74. **Update project title** — pick a real project uuid. *"Propose updating project `<uuid>` to title 'V2-chunkD renamed', then confirm."* The project shows the new title in Things.
+75. **Update notes** — *"Propose updating project `<uuid>` so notes='kickoff notes from MCP'."* Confirm. Open the project — notes replaced.
+76. **Update deadline** — *"Propose updating project `<uuid>` so deadline='2026-11-15'."* Confirm. Things shows the new deadline.
+77. **Update tags** — pick a project that has some tags. *"Propose updating project `<uuid>` so tags=['MCP-test']."* Confirm. Tags replaced.
+78. **Move project between areas** — pick a project in one area + an area uuid for a different area. *"Propose updating project `<uuid>` so area_id='<other-area-uuid>'."* Confirm. Project now sits under the new area.
+79. **Clear notes** — *"Propose updating project `<uuid>` so notes=''."* Confirm. Notes field empty.
+80. **Clear tags** — *"Propose updating project `<uuid>` so tags=[]."* Confirm. No tags.
+81. **Refuse empty proposal** — *"Propose updating project `<uuid>` (no fields specified)."* Expect a clean ValueError listing the valid fields.
+82. **Without auth token** — unset `THINGS_AUTH_TOKEN`, restart, propose an update. Expect actionable RuntimeError pointing at Settings → Manage. Restore.
+
+### Undo of `propose_update_project`
+83. **Undo restores original title** — propose+confirm #74. Call `undo()`. Old title comes back. `recent_undo_log()` shrinks.
+84. **Undo only touches changed fields** — propose+confirm a title change. Before calling undo, manually edit the project's NOTES in Things UI. Then `undo()`. After undo: title is restored, but YOUR manual notes edit survives. (Load-bearing property — same as #47 for to-dos.)
+
+# V2 manual verification checklist — Step 4 Chunk E (`propose_bulk_*` tools)
+
+Same ground rules: **Test** user only. `THINGS_AUTH_TOKEN` must be set. **All four bulk tools are NEVER_BYPASS** — they require explicit `confirm_action` even with `THINGS_MCP_AUTO_CONFIRM=1`.
+
+Setup: ensure you have 3+ throwaway Inbox tasks (titles like `bulk-1`, `bulk-2`, `bulk-3`) before starting.
+
+### `propose_bulk_complete`
+85. **Complete 3 tasks in one op** — gather 3 inbox task uuids. *"Propose bulk completing these 3 to-dos: [uuid1, uuid2, uuid3]."* Response has `auto_confirmed: False` (even if AUTO_CONFIRM=1). `confirm_action`. In Things: all 3 tasks now in Logbook with completed status. `recent_undo_log()` shows ONE `bulk_complete` row covering all 3.
+86. **Undo a bulk complete** — call `undo()` after #85. All 3 tasks return to incomplete status in their original location.
+87. **Abort on any already-done** — pick 2 incomplete tasks + 1 task already in your Logbook. *"Propose bulk completing these 3."* Expect a clean ValueError about the already-completed task. **No mutation lands** — verify the 2 still-incomplete tasks are still incomplete in Things.
+
+### `propose_bulk_delete`
+88. **Soft-delete 2 tasks** — gather 2 throwaway inbox uuids. *"Propose bulk deleting [uuid1, uuid2]."* Auto-confirmed must be False. `confirm_action`. Both tasks now in Logbook with canceled status. One undo_log row.
+89. **Undo a bulk delete** — `undo()` after #88. Both tasks restored to incomplete status in their original location.
+
+### `propose_bulk_move`
+90. **Move 2 tasks to Today** — gather 2 inbox uuids. *"Propose bulk moving these to today."* Confirm. Both tasks now in Today.
+91. **Move 2 tasks into a project** — gather 2 inbox uuids + a project uuid. *"Propose bulk moving these into project `<uuid>`."* Confirm. Both tasks under the project.
+92. **Undo a bulk move (per-item restore)** — propose+confirm a move where the source tasks had DIFFERENT original scheduling (one in Today, one in Anytime). After undo, each returns to its OWN original list, not a common one. **Load-bearing.**
+93. **Reject inbox/upcoming targets** — *"Propose bulk moving [<uuid>] to inbox."* Expect ValueError. Same for `target='upcoming'`.
+
+### `propose_bulk_update`
+94. **Apply same tag to 3 tasks** — gather 3 uuids with different existing tags. *"Propose bulk updating these to tags=['MCP-batch']."* Confirm. All 3 now have only that tag.
+95. **Undo a bulk update (per-item restore)** — `undo()` after #94. Each task gets its ORIGINAL set of tags back (different per task, not a common set). **Load-bearing.**
+96. **Refuse empty fields** — *"Propose bulk updating [uuids] with no fields."* Clean ValueError.
+
+### Never-bypass cross-check
+97. **AUTO_CONFIRM=1 doesn't bypass bulk** — set `THINGS_MCP_AUTO_CONFIRM=1` in Claude Desktop config, restart. Propose any bulk op. Response has `auto_confirmed: False` and a note about "never auto-confirmed". Confirm + undo as usual. Unset AUTO_CONFIRM after.

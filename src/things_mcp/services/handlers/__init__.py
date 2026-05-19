@@ -22,7 +22,19 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from . import add_todo, complete_todo, delete_todo, move_todo, update_todo
+from . import (
+    add_project,
+    add_todo,
+    bulk_complete,
+    bulk_delete,
+    bulk_move,
+    bulk_update,
+    complete_todo,
+    delete_todo,
+    move_todo,
+    update_project,
+    update_todo,
+)
 
 
 class Handler(Protocol):
@@ -41,6 +53,12 @@ REGISTRY: dict[str, Handler] = {
     update_todo.KIND: update_todo,  # type: ignore[dict-item]
     move_todo.KIND: move_todo,  # type: ignore[dict-item]
     delete_todo.KIND: delete_todo,  # type: ignore[dict-item]
+    add_project.KIND: add_project,  # type: ignore[dict-item]
+    update_project.KIND: update_project,  # type: ignore[dict-item]
+    bulk_complete.KIND: bulk_complete,  # type: ignore[dict-item]
+    bulk_delete.KIND: bulk_delete,  # type: ignore[dict-item]
+    bulk_move.KIND: bulk_move,  # type: ignore[dict-item]
+    bulk_update.KIND: bulk_update,  # type: ignore[dict-item]
 }
 
 

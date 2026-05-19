@@ -6,7 +6,9 @@ build an `add` URL for a non-Inbox list raises before launch.
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
+from typing import Any
 from urllib.parse import quote, urlencode
 
 
@@ -162,6 +164,146 @@ def build_update_url(
         params.append(("list-id", list_id))
 
     return "things:///update?" + urlencode(params, quote_via=quote)
+
+
+def build_add_project_url(
+    *,
+    title: str,
+    area_id: str | None = None,
+    when: str | None = None,
+    deadline: str | None = None,
+    notes: str | None = None,
+    tags: list[str] | None = None,
+    headings: list[str] | None = None,
+) -> str:
+    """V2 ``things:///add-project`` URL builder.
+
+    Two code paths:
+
+    * ``headings`` empty / None → ``things:///add-project?title=...&...``.
+      No auth token needed (add-project is unauthenticated).
+    * ``headings`` non-empty → ``things:///json?data=<url-encoded JSON>``.
+      The JSON endpoint is the ONLY URL-scheme mechanism that creates
+      native section headings inside a *new* project. See arch doc §5.3.
+
+    Computed views (Upcoming, Logbook, Trash) aren't relevant for projects
+    so no view-rejection is needed here.
+    """
+    if not title:
+        raise ValueError("title is required")
+
+    if headings:
+        return _build_add_project_json_url(
+            title=title,
+            area_id=area_id,
+            when=when,
+            deadline=deadline,
+            notes=notes,
+            tags=tags,
+            headings=headings,
+        )
+
+    params: list[tuple[str, str]] = [("title", title)]
+    if area_id:
+        params.append(("area-id", area_id))
+    if when:
+        params.append(("when", when))
+    if deadline:
+        params.append(("deadline", deadline))
+    if notes:
+        params.append(("notes", notes))
+    if tags:
+        params.append(("tags", ",".join(tags)))
+
+    return "things:///add-project?" + urlencode(params, quote_via=quote)
+
+
+def _build_add_project_json_url(
+    *,
+    title: str,
+    area_id: str | None,
+    when: str | None,
+    deadline: str | None,
+    notes: str | None,
+    tags: list[str] | None,
+    headings: list[str],
+) -> str:
+    """Encode an add-project + native-headings payload as ``things:///json``.
+
+    Things' JSON URL scheme wraps everything in an ``attributes`` object;
+    headings are sibling items under ``items`` (Things creates them in the
+    listed order at project birth).
+    """
+    project_attrs: dict[str, Any] = {"title": title}
+    if area_id:
+        project_attrs["area-id"] = area_id
+    if when:
+        project_attrs["when"] = when
+    if deadline:
+        project_attrs["deadline"] = deadline
+    if notes:
+        project_attrs["notes"] = notes
+    if tags:
+        project_attrs["tags"] = list(tags)
+
+    project_attrs["items"] = [
+        {"type": "heading", "attributes": {"title": h}} for h in headings
+    ]
+
+    payload = [{"type": "project", "attributes": project_attrs}]
+    encoded = quote(json.dumps(payload, ensure_ascii=False), safe="")
+    return "things:///json?data=" + encoded
+
+
+def build_update_project_url(
+    *,
+    id: str,
+    auth_token: str,
+    title: str | None = None,
+    notes: str | None = None,
+    when: str | None = None,
+    deadline: str | None = None,
+    tags: list[str] | None = None,
+    area_id: str | None = None,
+    completed: bool | None = None,
+    canceled: bool | None = None,
+) -> str:
+    """V2 ``things:///update-project`` URL. Requires ``auth_token``.
+
+    Mirrors :func:`build_update_url` for to-dos; the parameter names that
+    differ on the URL-scheme side (``area-id``) are translated here.
+
+    ``completed=True, canceled=True`` together is the soft-delete shape the
+    ``add_project`` undo path relies on (analogous to the to-do soft-delete).
+    """
+    if not id:
+        raise ValueError("id is required")
+    if not auth_token:
+        raise ValueError(
+            "auth_token is required for things:///update-project. Generate "
+            "it in Things → Settings → General → Enable Things URLs → "
+            "Manage, then set THINGS_AUTH_TOKEN."
+        )
+
+    params: list[tuple[str, str]] = [("id", id), ("auth-token", auth_token)]
+    if completed is not None:
+        params.append(("completed", "true" if completed else "false"))
+    if canceled is not None:
+        params.append(("canceled", "true" if canceled else "false"))
+    if title is not None:
+        params.append(("title", title))
+    if notes is not None:
+        params.append(("notes", notes))
+    if when is not None:
+        params.append(("when", when))
+    if deadline is not None:
+        params.append(("deadline", deadline))
+    if tags is not None:
+        params.append(("tags", ",".join(tags)))
+    if area_id is not None:
+        params.append(("area-id", area_id))
+
+    return "things:///update-project?" + urlencode(params, quote_via=quote)
 
 
 async def launch(url: str) -> None:

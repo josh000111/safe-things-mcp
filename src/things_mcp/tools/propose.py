@@ -23,9 +23,15 @@ from mcp.server.fastmcp import FastMCP
 
 from .. import config
 from ..models import (
+    ProposeAddProjectInput,
     ProposeAddTodoInput,
+    ProposeBulkCompleteInput,
+    ProposeBulkDeleteInput,
+    ProposeBulkMoveInput,
+    ProposeBulkUpdateInput,
     ProposeDeleteTodoInput,
     ProposeMoveTodoInput,
+    ProposeUpdateProjectInput,
     ProposeUpdateTodoInput,
 )
 from ..services import handlers
@@ -158,6 +164,158 @@ async def propose_delete_todo(todo_id: str) -> dict:
     )
 
 
+async def propose_add_project(
+    title: str,
+    area_id: str | None = None,
+    when: str | None = None,
+    deadline: str | None = None,
+    notes: str | None = None,
+    tags: list[str] | None = None,
+    headings: list[str] | None = None,
+) -> dict:
+    """Propose adding a new Things project.
+
+    When ``headings`` is non-empty, the project is created through Things'
+    ``things:///json`` endpoint — the only URL-scheme path that produces
+    native section headings at project birth. Without headings the
+    unauthenticated ``add-project`` URL is used.
+
+    Undo soft-deletes the created project (canceled+completed → Logbook).
+    Undo requires ``THINGS_AUTH_TOKEN`` even though execute does not.
+    """
+    payload_model = ProposeAddProjectInput(
+        title=title,
+        area_id=area_id,
+        when=when,
+        deadline=deadline,
+        notes=notes,
+        tags=tags,
+        headings=headings,
+    )
+    payload = payload_model.model_dump()
+    preview = handlers.add_project.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.add_project.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_update_project(
+    project_id: str,
+    title: str | None = None,
+    notes: str | None = None,
+    deadline: str | None = None,
+    tags: list[str] | None = None,
+    area_id: str | None = None,
+) -> dict:
+    """Propose editing fields on an existing project.
+
+    Convention: ``None`` means "don't change"; ``""`` clears a string
+    field; ``[]`` clears all tags. At least one updatable field required.
+
+    Requires ``THINGS_AUTH_TOKEN``. First cut supports: title, notes,
+    deadline, tags, area_id. ``when`` rescheduling is a follow-up.
+    """
+    payload_model = ProposeUpdateProjectInput(
+        project_id=project_id,
+        title=title,
+        notes=notes,
+        deadline=deadline,
+        tags=tags,
+        area_id=area_id,
+    )
+    payload = payload_model.model_dump(exclude_none=True)
+    preview = handlers.update_project.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.update_project.KIND, payload=payload, preview=preview
+    )
+
+
+# ---------- bulk tools (always in NEVER_BYPASS_KINDS) ----------
+
+
+async def propose_bulk_complete(todo_ids: list[str]) -> dict:
+    """Propose completing N to-dos in one airlocked op.
+
+    **Never auto-confirmed** — explicit ``confirm_action`` required even
+    when ``THINGS_MCP_AUTO_CONFIRM=1``. Requires ``THINGS_AUTH_TOKEN``.
+    """
+    payload_model = ProposeBulkCompleteInput(todo_ids=todo_ids)
+    payload = payload_model.model_dump()
+    preview = handlers.bulk_complete.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.bulk_complete.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_bulk_delete(todo_ids: list[str]) -> dict:
+    """Propose soft-deleting N to-dos in one airlocked op.
+
+    Each task gets marked canceled+completed (moves to Logbook). Use
+    ``undo()`` to restore the whole batch. **Never auto-confirmed.**
+    """
+    payload_model = ProposeBulkDeleteInput(todo_ids=todo_ids)
+    payload = payload_model.model_dump()
+    preview = handlers.bulk_delete.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.bulk_delete.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_bulk_move(todo_ids: list[str], target: str) -> dict:
+    """Propose moving N to-dos to a single target.
+
+    ``target`` follows the same rules as :func:`propose_move_todo`:
+    ``today`` / ``anytime`` / ``someday`` for scheduling, or a
+    project/area UUID for membership. **Never auto-confirmed.**
+    """
+    target_lower = target.lower() if target else target
+    if target_lower == "inbox":
+        raise ValueError(
+            "target='inbox' is not supported in V2 first cut. "
+            "Use 'today', 'anytime', 'someday', or a project/area UUID."
+        )
+    if target_lower == "upcoming":
+        raise ValueError(
+            "target='upcoming' is a computed view in Things, not a move "
+            "destination. To schedule tasks for a future date that appears "
+            "in Upcoming, use propose_bulk_update with `when` (arrives in a "
+            "follow-up)."
+        )
+    payload_model = ProposeBulkMoveInput(todo_ids=todo_ids, target=target)
+    payload = payload_model.model_dump()
+    preview = handlers.bulk_move.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.bulk_move.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_bulk_update(
+    todo_ids: list[str],
+    title: str | None = None,
+    notes: str | None = None,
+    deadline: str | None = None,
+    tags: list[str] | None = None,
+) -> dict:
+    """Propose applying one set of field changes to N to-dos.
+
+    Convention matches :func:`propose_update_todo`: ``None`` means "don't
+    change", ``""`` clears a string field, ``[]`` clears tags. At least
+    one updatable field required. **Never auto-confirmed.**
+    """
+    payload_model = ProposeBulkUpdateInput(
+        todo_ids=todo_ids,
+        title=title,
+        notes=notes,
+        deadline=deadline,
+        tags=tags,
+    )
+    payload = payload_model.model_dump(exclude_none=True)
+    preview = handlers.bulk_update.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.bulk_update.KIND, payload=payload, preview=preview
+    )
+
+
 # ---------- shared helper ----------
 
 
@@ -217,3 +375,9 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_update_todo)
     mcp.tool()(propose_move_todo)
     mcp.tool()(propose_delete_todo)
+    mcp.tool()(propose_add_project)
+    mcp.tool()(propose_update_project)
+    mcp.tool()(propose_bulk_complete)
+    mcp.tool()(propose_bulk_delete)
+    mcp.tool()(propose_bulk_move)
+    mcp.tool()(propose_bulk_update)

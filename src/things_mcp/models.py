@@ -134,6 +134,129 @@ class ProposeDeleteTodoInput(BaseModel):
     todo_id: str = Field(..., min_length=1)
 
 
+class ProposeAddProjectInput(BaseModel):
+    """V2 — propose adding a new Things project.
+
+    Two URL-scheme paths under the hood:
+
+    * No ``headings`` → ``things:///add-project?...`` (unauthenticated).
+    * ``headings`` non-empty → ``things:///json?data=<JSON>`` — the only
+      mechanism for creating native section headings at project birth.
+
+    ``area_id`` puts the project under an existing area UUID. ``when`` /
+    ``deadline`` follow the same conventions as the to-do tools.
+    """
+    title: str = Field(..., min_length=1, max_length=500)
+    area_id: str | None = Field(default=None, min_length=1)
+    when: str | None = Field(
+        default=None,
+        description=(
+            "Things 'when' value: today, anytime, someday, or an ISO date "
+            "(YYYY-MM-DD)."
+        ),
+    )
+    deadline: str | None = Field(default=None, description="ISO date YYYY-MM-DD.")
+    notes: str | None = None
+    tags: list[str] | None = None
+    headings: list[str] | None = Field(
+        default=None,
+        description=(
+            "Native section headings to create at project birth. Routes "
+            "through the things:///json endpoint."
+        ),
+    )
+
+
+class ProposeUpdateProjectInput(BaseModel):
+    """V2 — propose updating fields on an existing project.
+
+    Convention mirrors :class:`ProposeUpdateTodoInput`: ``None`` means
+    "don't change", ``""`` clears a string field, ``[]`` clears all tags.
+    Pass at least one updatable field.
+
+    ``when`` is intentionally absent from the first cut (same reason as
+    update_todo — restoring scheduling cleanly is a follow-up).
+    """
+    project_id: str = Field(..., min_length=1)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    notes: str | None = None
+    deadline: str | None = Field(
+        default=None,
+        description="ISO date YYYY-MM-DD, or '' to clear.",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="List of tag names; [] clears all tags.",
+    )
+    area_id: str | None = Field(
+        default=None,
+        description="Area UUID to move the project into, or '' to clear.",
+    )
+
+    @model_validator(mode="after")
+    def _require_at_least_one_field(self) -> "ProposeUpdateProjectInput":
+        if (
+            self.title is None
+            and self.notes is None
+            and self.deadline is None
+            and self.tags is None
+            and self.area_id is None
+        ):
+            raise ValueError(
+                f"propose_update_project for {self.project_id!r} has no fields to "
+                "update. Pass at least one of: title, notes, deadline, tags, area_id."
+            )
+        return self
+
+
+class ProposeBulkCompleteInput(BaseModel):
+    """V2 — propose marking N to-dos completed in one airlocked op.
+
+    Always in :data:`config.NEVER_BYPASS_KINDS` — explicit confirm required.
+    """
+    todo_ids: list[str] = Field(..., min_length=1)
+
+
+class ProposeBulkDeleteInput(BaseModel):
+    """V2 — propose soft-deleting N to-dos in one airlocked op."""
+    todo_ids: list[str] = Field(..., min_length=1)
+
+
+class ProposeBulkMoveInput(BaseModel):
+    """V2 — propose moving N to-dos to a single target."""
+    todo_ids: list[str] = Field(..., min_length=1)
+    target: str = Field(..., min_length=1)
+
+
+class ProposeBulkUpdateInput(BaseModel):
+    """V2 — propose applying one set of field changes to N to-dos.
+
+    Same convention as :class:`ProposeUpdateTodoInput`: ``None`` means
+    "don't change", ``""`` clears a string field, ``[]`` clears tags.
+    Pass at least one updatable field.
+    """
+    todo_ids: list[str] = Field(..., min_length=1)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    notes: str | None = None
+    deadline: str | None = Field(
+        default=None,
+        description="ISO date YYYY-MM-DD, or '' to clear.",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="List of tag names; [] clears all tags.",
+    )
+
+    @model_validator(mode="after")
+    def _require_at_least_one_field(self) -> "ProposeBulkUpdateInput":
+        if self.title is None and self.notes is None and self.deadline is None and self.tags is None:
+            raise ValueError(
+                "propose_bulk_update has no fields to update. Pass at least "
+                "one of: title, notes, deadline, tags."
+            )
+        return self
+
+
 class HealthReport(BaseModel):
     things_db_path: str
     things_db_exists: bool
