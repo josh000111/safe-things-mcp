@@ -116,6 +116,19 @@ async def propose_move_todo(todo_id: str, target: str) -> dict:
     Requires ``THINGS_AUTH_TOKEN``. Move-to-Inbox and specific-date moves
     are deferred to a follow-up.
     """
+    target_lower = target.lower() if target else target
+    if target_lower == "inbox":
+        raise ValueError(
+            "target='inbox' is not supported in V2 first cut. "
+            "Use 'today', 'anytime', 'someday', or a project/area UUID."
+        )
+    if target_lower == "upcoming":
+        raise ValueError(
+            "target='upcoming' is a computed view in Things, not a move "
+            "destination. To schedule a task for a future date that appears "
+            "in Upcoming, update the to-do with `when='<YYYY-MM-DD>'` "
+            "(specific-date moves arrive in a follow-up)."
+        )
     payload_model = ProposeMoveTodoInput(todo_id=todo_id, target=target)
     payload = payload_model.model_dump()
     preview = handlers.move_todo.make_preview(payload)
