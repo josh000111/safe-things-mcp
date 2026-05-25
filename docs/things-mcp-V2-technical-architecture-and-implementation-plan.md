@@ -344,6 +344,7 @@ Verification expands at each step:
 3. Optional: backup of `main.sqlite` to `~/.things-mcp/backups/` on first run of each session (defense in depth — Things has its own backup system but it's user-invisible).
 4. Optional: Things app launch / focus helper if the URL scheme call fails because the app is quit.
 5. Optional: AppleScript-based `reveal_in_things(todo_id)` for UX polish.
+6. **Tag pre-validation** — before firing any URL-scheme call that accepts a `tags` param, validate each tag name against `get_tags()` and return a clear error if unknown. Surfaced in Round-4 testing: Things silently ignores unknown tags with no error, making the server appear to succeed when it hasn't. Affects `add_inbox_todo`, `add_*_todo`, `propose_update_todo`, `propose_bulk_update`.
 
 ---
 
