@@ -60,15 +60,35 @@ def projects(area: str | None = None, include_completed: bool = False) -> list[d
 
 
 def project(project_id: str) -> dict[str, Any] | None:
-    return things.get(project_id, **_kw())
+    """Return the full project row including tags.
+
+    Uses things.tasks(type='project') (not things.get()) so the ``tags``
+    field is present in the response.
+    """
+    row = things.tasks(project_id, type="project", **_kw())
+    return row if isinstance(row, dict) else None
 
 
 def todo(todo_id: str) -> dict[str, Any] | None:
-    return things.get(todo_id, **_kw())
+    """Return the full to-do row including tags.
+
+    Uses things.tasks() (not things.get()) so the ``tags`` field is
+    present in the response.
+    """
+    try:
+        row = things.tasks(todo_id, **_kw())
+    except ValueError:
+        return None
+    return row if isinstance(row, dict) else None
 
 
 def tags(include_items: bool = False) -> list[dict[str, Any]]:
     return things.tags(include_items=include_items, **_kw())
+
+
+def get_tag_names() -> set[str]:
+    """Return the set of all tag names currently in Things (case-sensitive)."""
+    return {t["title"] for t in things.tags(**_kw())}
 
 
 def search(query: str) -> list[dict[str, Any]]:
@@ -80,22 +100,8 @@ def get(uuid: str) -> dict[str, Any] | None:
 
 
 def get_todo(uuid: str) -> dict[str, Any] | None:
-    """Return the full to-do row INCLUDING tags.
-
-    ``things.get()`` omits the ``tags`` field; ``things.tasks(uuid)`` returns
-    it (as a list of tag-name strings) when the task has tags, or omits the
-    key entirely otherwise. Update-flavour handlers use this to snapshot
-    before-state with tag fidelity.
-
-    ``things.tasks`` raises ``ValueError`` when the argument is not a valid
-    Things UUID (e.g. a plain name string). We treat that as not-found so
-    callers can fall through to name-based scanning without a try/except.
-    """
-    try:
-        row = things.tasks(uuid, **_kw())
-    except ValueError:
-        return None
-    return row if isinstance(row, dict) else None
+    """Return the full to-do row INCLUDING tags. Delegates to :func:`todo`."""
+    return todo(uuid)
 
 
 def find_recent_inbox_by_title(title: str, created_after: str) -> dict[str, Any] | None:
@@ -115,14 +121,8 @@ def find_recent_inbox_by_title(title: str, created_after: str) -> dict[str, Any]
 
 
 def get_project_row(uuid: str) -> dict[str, Any] | None:
-    """Return the full project row INCLUDING tags.
-
-    Same pattern as :func:`get_todo` but constrained to ``type='project'``.
-    ``things.tasks(uuid, type='project')`` returns ``[]`` (not the row)
-    when the UUID doesn't refer to a project; treat that as not-found.
-    """
-    row = things.tasks(uuid, type="project", **_kw())
-    return row if isinstance(row, dict) else None
+    """Return the full project row INCLUDING tags. Delegates to :func:`project`."""
+    return project(uuid)
 
 
 def find_recent_project_by_title(title: str, created_after: str) -> dict[str, Any] | None:

@@ -37,7 +37,7 @@ from ..models import (
     ProposeUpdateProjectInput,
     ProposeUpdateTodoInput,
 )
-from ..services import handlers
+from ..services import handlers, url_scheme
 from ..state import pending
 
 
@@ -62,6 +62,7 @@ async def propose_add_todo(
     the action is executed immediately and ``auto_confirmed=True`` is
     set — the result lives in the ``result`` field.
     """
+    url_scheme.validate_tags(tags)
     payload_model = ProposeAddTodoInput(
         title=title,
         list_id=list_id,
@@ -97,6 +98,7 @@ async def propose_update_todo(
     First cut supports: title, notes, deadline, tags. ``when`` rescheduling
     arrives in a follow-up.
     """
+    url_scheme.validate_tags(tags)
     payload_model = ProposeUpdateTodoInput(
         todo_id=todo_id,
         title=title,
@@ -186,6 +188,7 @@ async def propose_add_project(
     Undo soft-deletes the created project (canceled+completed → Logbook).
     Undo requires ``THINGS_AUTH_TOKEN`` even though execute does not.
     """
+    url_scheme.validate_tags(tags)
     payload_model = ProposeAddProjectInput(
         title=title,
         area_id=area_id,
@@ -218,6 +221,7 @@ async def propose_update_project(
     Requires ``THINGS_AUTH_TOKEN``. First cut supports: title, notes,
     deadline, tags, area_id. ``when`` rescheduling is a follow-up.
     """
+    url_scheme.validate_tags(tags)
     payload_model = ProposeUpdateProjectInput(
         project_id=project_id,
         title=title,
@@ -305,6 +309,7 @@ async def propose_bulk_update(
     change", ``""`` clears a string field, ``[]`` clears tags. At least
     one updatable field required. **Never auto-confirmed.**
     """
+    url_scheme.validate_tags(tags)
     payload_model = ProposeBulkUpdateInput(
         todo_ids=todo_ids,
         title=title,

@@ -49,6 +49,7 @@ def register(mcp: FastMCP) -> None:
         writes when you don't need ``undo()`` support — for that, prefer
         ``propose_add_todo(list_id='inbox')``.
         """
+        url_scheme.validate_tags(tags)
         payload = AddInboxTodoInput(
             title=title,
             notes=notes,
@@ -167,6 +168,7 @@ async def _direct_add(
     pre-existing ``propose_add_todo`` — we skip the queue but still go
     through the handler for undo-log bookkeeping.
     """
+    url_scheme.validate_tags(tags)
     payload_model = DirectAddTodoInput(
         title=title,
         list_id=list_id,

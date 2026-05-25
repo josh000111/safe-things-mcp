@@ -12,6 +12,21 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 
+def validate_tags(requested: list[str] | None) -> None:
+    """Raise ValueError with actionable message if any tag doesn't exist in Things."""
+    if not requested:
+        return
+    from . import things_repo
+    known = things_repo.get_tag_names()
+    unknown = [t for t in requested if t not in known]
+    if unknown:
+        raise ValueError(
+            f"Unknown tag(s): {unknown}. "
+            f"Available tags: {sorted(known)}. "
+            "Create the tag in Things first, then retry."
+        )
+
+
 def build_add_url(
     *,
     title: str,
