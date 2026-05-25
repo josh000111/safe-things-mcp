@@ -27,13 +27,19 @@ _CREATED_FMT = "%Y-%m-%d %H:%M:%S"
 
 
 def make_preview(payload: dict) -> str:
-    """One-line summary for the proposal."""
+    """One-line summary for the proposal.
+
+    Validates name and project existence eagerly so a bad proposal fails
+    here rather than silently enqueuing and only erroring at confirm time.
+    """
     name = payload.get("name", "")
     project_id = payload.get("project_id", "")
-    try:
-        dummy_title = make_dummy_title(name)
-    except ValueError:
-        dummy_title = f"__{name.upper()}__"
+    dummy_title = make_dummy_title(name)  # raises ValueError for invalid names
+    if things_repo.project(project_id) is None:
+        raise ValueError(
+            f"Project {project_id!r} not found. "
+            "Use list/search tools to find the correct project UUID."
+        )
     parts = [
         f"Add dummy heading {dummy_title!r} to project {project_id}",
         "(URL-scheme only — position not guaranteed)",

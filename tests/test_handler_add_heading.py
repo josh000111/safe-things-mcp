@@ -62,14 +62,16 @@ def _heading_row(
 # ---------- make_preview ----------
 
 
-def test_make_preview_basic():
+def test_make_preview_basic(monkeypatch):
+    monkeypatch.setattr(things_repo, "project", lambda pid: _project_row())
     preview = add_heading.make_preview({"project_id": "PROJ-1", "name": "Design"})
     assert "__DESIGN__" in preview
     assert "PROJ-1" in preview
     assert "position not guaranteed" in preview
 
 
-def test_make_preview_with_after_todo_id():
+def test_make_preview_with_after_todo_id(monkeypatch):
+    monkeypatch.setattr(things_repo, "project", lambda pid: _project_row())
     preview = add_heading.make_preview({
         "project_id": "PROJ-1",
         "name": "Design",
@@ -77,6 +79,18 @@ def test_make_preview_with_after_todo_id():
     })
     assert "position not guaranteed" in preview
     assert "TODO-1" in preview
+
+
+def test_make_preview_invalid_name_raises(monkeypatch):
+    monkeypatch.setattr(things_repo, "project", lambda pid: _project_row())
+    with pytest.raises(ValueError):
+        add_heading.make_preview({"project_id": "PROJ-1", "name": "Hello!"})
+
+
+def test_make_preview_project_not_found_raises(monkeypatch):
+    monkeypatch.setattr(things_repo, "project", lambda pid: None)
+    with pytest.raises(ValueError, match="not found"):
+        add_heading.make_preview({"project_id": "GHOST", "name": "Design"})
 
 
 # ---------- execute ----------
