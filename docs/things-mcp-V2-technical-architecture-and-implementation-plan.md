@@ -21,15 +21,22 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 4b — dummy-heading interim layer (URL-scheme only) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| Round-4 deferred items #73, #82, #97 — error-path manual verification | n/a — no build needed | ⏳ Run during Round-5 preflight (config-change + restart sequence) |
 
 Automated suite: 195 tests, ~1.5s, hermetic (no real Things DB / URL launches).
 
-### Round-4 deferred items (non-blocking)
-Items #73, #82, #97 require a config-change + session restart (token removal or `AUTO_CONFIRM` flag toggle). All three test error paths already covered by unit tests. To close them: unset token → restart → run #73 + #82 → restore token → restart → run #97. Can be batched with Round-5 preflight.
+### Round-4 deferred items — how to close them
+Items #73, #82, #97 require a config-change + session restart (token removal or `AUTO_CONFIRM` flag toggle). All three test error paths already covered by unit tests. Run at the top of the Round-5 Test-user session before the main 4b checklist:
+1. Unset `THINGS_AUTH_TOKEN` → restart MCP server → run items #73 + #82.
+2. Restore `THINGS_AUTH_TOKEN` → restart → set `THINGS_MCP_AUTO_CONFIRM=1` → restart → run item #97 → restore flag.
 
-### Known limitations documented in Round 4
-- **Unknown tags silently no-op** — `add_inbox_todo` and `propose_bulk_update` with tags that don't exist in Things report success but Things silently ignores them. Things URL-scheme limitation, not a regression. Low-priority follow-up: add pre-validation against `get_tags()`.
-- **`get_project` / `get_todo` don't return tags** — `things-py` library limitation. Tag verification in tests falls back to direct SQLite reads.
+### Pre-release requirements surfaced in Round 4
+Both items below **must ship before public release**. They are not blockers for steps 4b / 5 / 6, but they must be fixed and manually verified before the server is published. Full implementation detail is in §11.
+
+- **Fix A — Unknown tags silently no-op:** `add_inbox_todo` and `propose_bulk_update` (and all other write tools accepting `tags`) report success even when a supplied tag name doesn't exist in Things — Things URL scheme silently ignores unknown tags. A public user has no way to know their tag was dropped. Fix: pre-validate every tag name against `get_tags()` before firing the URL scheme and return a clear error listing available tags if any are unknown.
+- **Fix B — Tags missing from read responses:** `get_project` and `get_todo` return no tag data, meaning an agent cannot tell the user what tags a task has. Root cause is either a `things-py` gap or a missing field in our `things_repo` response shaping — needs diagnosis. Fix: augment responses with a direct read-only SQLite tag lookup if `things-py` doesn't supply them.
 
 ## 1. Context
 
@@ -426,3 +433,126 @@ Each test gets one line in `tests/things-mcp-manual-verification.md` initially, 
 - **HTTP `x-callback-url` listener (`aiohttp` mini-server)** → replaced by DB polling. Reason: macOS routes `http://` callbacks through the default browser, opening a Safari tab per write. Polling has no UX side effect, removes the `aiohttp` dependency, and simplifies the write path. See §4.3.
 
 What survives from the brief: the 3-layer split (read / write / safeguards), the local-only architecture, and the principle that every destructive action must be reversible.
+
+---
+
+## 11. Pre-release Fixes (must ship before public release)
+
+Both fixes are self-contained and can be built together in one session after step 6, or pulled forward into an earlier session if convenient. Neither touches the propose/confirm plumbing.
+
+---
+
+### Fix A — Tag pre-validation for write tools
+
+**Problem:** All write tools that accept a `tags` parameter (`add_inbox_todo`, `add_today_todo`, `add_anytime_todo`, `add_someday_todo`, `propose_update_todo`, `propose_bulk_update`) silently succeed even when a supplied tag name doesn't exist in Things. The Things URL scheme drops unknown tags without any error signal. A public user who misspells a tag name or uses a tag that hasn't been created yet receives a success response but their tag is never applied.
+
+**Root cause:** The URL scheme itself — not a things-mcp bug. The fix must live in things-mcp as a pre-flight validation step.
+
+**Fix — implementation steps:**
+
+1. Add a helper to `services/things_repo.py`:
+   ```python
+   def get_tag_names() -> set[str]:
+       """Return the set of all tag names currently in Things (case-sensitive)."""
+       return {t["title"] for t in things.tags()}
+   ```
+
+2. Add a validator in `services/url_scheme.py` (or a new `services/validators.py`):
+   ```python
+   def validate_tags(requested: list[str]) -> None:
+       """Raise ValueError with actionable message if any tag doesn't exist."""
+       known = things_repo.get_tag_names()
+       unknown = [t for t in requested if t not in known]
+       if unknown:
+           raise ValueError(
+               f"Unknown tag(s): {unknown}. "
+               f"Available tags: {sorted(known)}. "
+               "Create the tag in Things first, then retry."
+           )
+   ```
+
+3. Call `validate_tags(tags)` in every write tool that accepts a `tags` param, **before** the URL is built and fired. For `propose_*` tools, validate at propose time (not confirm time) so the user gets the error immediately.
+
+4. Add unit tests in a new `tests/test_tag_validation.py`:
+   - `validate_tags([])` → no-op.
+   - `validate_tags(["Errand"])` with `Errand` in mocked `get_tag_names()` → no-op.
+   - `validate_tags(["Errand", "FakeTag"])` → raises `ValueError` naming `FakeTag` and listing known tags.
+   - Integration: call `add_inbox_todo` with an unknown tag → error returned before URL fires (assert `subprocess.run` not called).
+
+**Manual verification items to add to `tests/things-mcp-manual-verification.md`:**
+- Call `add_inbox_todo` with `tags=["NonExistentTag"]` → server returns a clear error naming the bad tag and listing available ones. Things UI unchanged.
+- Call `add_inbox_todo` with `tags=["Errand"]` (real tag) → succeeds, tag appears on task in Things UI.
+- Call `propose_bulk_update` with a mix of real and fake tags → error returned at propose stage, no pending action created.
+
+---
+
+### Fix B — Tags missing from `get_project` / `get_todo` read responses
+
+**Problem:** `get_project` and `get_todo` return no tag data. When a user asks "what tags does this task have?", the agent cannot answer. In Round-4 testing, tag verification required falling back to direct SQLite reads — meaning the data is in the DB, but things-mcp isn't surfacing it.
+
+**Diagnosis step (do this first):**
+
+Check whether `things-py` already provides tags and we're just not forwarding them, or whether the library genuinely omits them:
+
+```python
+import things
+task = things.get("SOME_TASK_UUID")
+print(task)  # does "tags" key appear? is it populated?
+
+todos = things.todos(start="Inbox")
+print(todos[0])  # same check
+```
+
+Run this against the Test account Things DB. Two outcomes:
+
+- **Outcome A — `things-py` does return tags:** The fix is purely in `things_repo.py` — ensure the `tags` field is included in the dict we return from `get_todo()` and `get_project()` item lists. Add it to the relevant Pydantic model in `models.py`.
+
+- **Outcome B — `things-py` doesn't return tags:** Augment with a direct read-only SQLite query. The Things 3 DB schema stores tags via a join table. Query pattern (adapt column names by inspecting schema with `.schema TMTask` etc.):
+
+  ```python
+  import sqlite3, things
+
+  def _fetch_tags_for_uuid(db_path: str, uuid: str) -> list[str]:
+      """Read-only supplementary tag lookup for a single task UUID."""
+      sql = """
+          SELECT t.title
+          FROM TMTag t
+          JOIN TMTaskTag tt ON tt.tags = t.uuid
+          WHERE tt.tasks = ?
+          ORDER BY t.title
+      """
+      with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+          conn.execute("PRAGMA query_only = ON")
+          rows = conn.execute(sql, (uuid,)).fetchall()
+      return [r[0] for r in rows]
+  ```
+
+  > **Note:** Verify exact table and column names by running `SELECT name FROM sqlite_master WHERE type='table'` and `.schema TMTag` / `.schema TMTaskTag` against the real Things DB before writing the query. The names above are best-guess from community schema references and may differ between Things versions.
+
+  Call `_fetch_tags_for_uuid` inside `things_repo.get_todo()` and inside the item-iteration loop in `things_repo.get_project()` to annotate each task with its tags before returning.
+
+**Unit tests to add:**
+- Mock the SQLite tag-lookup (or `things.get`) to return tags → assert `get_todo` response includes `tags: ["Errand", "Home"]`.
+- Task with no tags → `tags: []` (not absent, not `None`).
+- `get_project` → each item in the returned task list includes a `tags` field.
+
+**Manual verification items to add to `tests/things-mcp-manual-verification.md`:**
+- Tag a task in Things UI with "Errand". Call `get_todo(uuid)` → response includes `tags: ["Errand"]`.
+- Call `get_project(project_uuid)` where one task has tags → that task's entry includes its tags.
+- Task with no tags → `get_todo` returns `tags: []`.
+
+---
+
+### Scheduling these fixes
+
+Suggested sequencing:
+
+| When | What |
+| --- | --- |
+| After step 6 is verified | Build Fix A + Fix B together in one session |
+| Same session | Add unit tests for both |
+| Same session | Produce handoff doc `tests/handoff-pre-release-fixes.md` |
+| Test-user session | Manual verification of Fix A + Fix B items |
+| On pass | Mark both rows ✅ in status table → server is release-ready |
+
+If a blocking bug surfaces during steps 4b–6 that touches the tag or read layer, pull the relevant fix forward rather than waiting.
