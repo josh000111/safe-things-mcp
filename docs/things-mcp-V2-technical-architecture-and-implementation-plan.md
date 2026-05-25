@@ -18,14 +18,14 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done | ✅ Verified (Round 3 — items 56/57 target-validation fix landed post-run) |
 | V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ✅ Done | ✅ Verified (Round 4 — 27/30 pass, 3 deferred; 0 blocking bugs; see `tests/V2-Round4-chunks-D-E-verification-2026-05-19.md`) |
 | V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done | ✅ Verified (Round 4 — same session; 0 blocking bugs) |
-| V2 step 4b — dummy-heading interim layer (URL-scheme only) | ✅ Done | ⏳ Manual Testing Session: Not yet run |
+| V2 step 4b — dummy-heading interim layer (URL-scheme only) | ✅ Done | ✅ Verified (Round 5 — 227 tests pass; items 98–122 all pass; see tests/V2-step-4b-verification-2026-05-25.md) |
 | V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | Round-4 deferred items #73, #82, #97 — error-path manual verification | n/a — no build needed | ⏳ Run during Round-5 preflight (config-change + restart sequence) |
 
-Automated suite: 195 tests, ~1.5s, hermetic (no real Things DB / URL launches).
+Automated suite: 227 tests, ~1.5s, hermetic (no real Things DB / URL launches).
 
 ### Round-4 deferred items — how to close them
 Items #73, #82, #97 require a config-change + session restart (token removal or `AUTO_CONFIRM` flag toggle). All three test error paths already covered by unit tests. Run at the top of the Round-5 Test-user session before the main 4b checklist:

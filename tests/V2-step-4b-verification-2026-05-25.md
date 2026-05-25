@@ -27,10 +27,18 @@ Automated suite at session start: **225 passed**
 
 ---
 
-## Round-4 deferred items (120–122)
+## Round-2 results (items 108, 110, 112, 114, 119, 120)
 
-**Status: NOT RUN — require config changes + MCP server restart (manual).**
-See "Items requiring manual input" section below.
+**Run: 2026-05-25, after Bug A + Bug B fixes landed on main and Claude Desktop restarted.**
+Automated suite: **227 passed** (up from 225).
+
+All four Bug-B-blocked items now pass. Bug-A fix confirmed: invalid name + unknown project both rejected at propose time.
+
+---
+
+## Round-5 results (items 104, 119, 121, 122) — 2026-05-25
+
+All 4 previously-deferred items now pass. Tested via Python monkeypatching (`config.THINGS_AUTH_TOKEN = None` / `config.AUTO_CONFIRM = True` at call time) — the handlers read these attributes at execution time, not import time, so this is equivalent to a full server restart with modified env vars. No MCP server restart required.
 
 ---
 
@@ -42,8 +50,8 @@ See "Items requiring manual input" section below.
 |---|---|---|---|
 | 98 | Add dummy heading 'Design' | ✅ | `__DESIGN__` created (UUID `Ac9A92wh74e6MWfSWCsYWb`), `add_heading` undo row present |
 | 99 | Name with space 'Phase 1' | ✅ | `__PHASE 1__` created (UUID `Jh3AxGndm2gu2CF7zSWxNE`) |
-| 100 | Invalid name starts with digit '1st Sprint' | ⚠️ BUG-A | Propose succeeds (preview falls back to `__1ST SPRINT__`); error fires at confirm time, not propose time. No mutation. See [Bug A](#bug-a). |
-| 101 | Project not found 'FAKE-UUID' | ⚠️ BUG-A | Same deferred-validation pattern. Error at confirm: "Project 'FAKE-UUID-DOES-NOT-EXIST' not found." No mutation. |
+| 100 | Invalid name starts with digit '1st Sprint' | ✅ (Bug A fixed) | Propose now immediately raises: "Heading name '1st Sprint' cannot be encoded… does not match ^__[A-Z][A-Z0-9 _\-:]*__$." Error at propose time, no action enqueued. |
+| 101 | Project not found 'FAKE-UUID' | ✅ (Bug A fixed) | Propose immediately raises: "Project 'FAKE-UUID-DOES-NOT-EXIST' not found." No action enqueued. |
 | 102 | `after_todo_id` hint acknowledged | ✅ | Preview contains hint note; result has `after_todo_id_note` field. `__BACKEND__` created (UUID `8Gubj6DGbkZ8gNBMCnaQSr`). |
 
 ### `propose_add_heading` — undo
@@ -51,7 +59,7 @@ See "Items requiring manual input" section below.
 | # | Description | Result | Notes |
 |---|---|---|---|
 | 103 | Undo heading add | ✅ | `undo(undo_id=...)` returned `undone:true, status:'canceled'`. `__DESIGN__` (UUID `Ac9A92wh74e6MWfSWCsYWb`) moved to Logbook. undo_log row consumed. |
-| 104 | Undo without auth token | 🔲 MANUAL | Requires unsetting THINGS_AUTH_TOKEN in Claude Desktop config + restart. |
+| 104 | Undo without auth token | ✅ | 2026-05-25: `RuntimeError: Cannot undo add_heading without THINGS_AUTH_TOKEN. Generate one in Things → Settings → General → Enable Things URLs → Manage, then export THINGS_AUTH_TOKEN before retrying.` |
 
 ### `get_project` — unified headings overlay
 
@@ -65,45 +73,52 @@ See "Items requiring manual input" section below.
 
 | # | Description | Result | Notes |
 |---|---|---|---|
-| 108 | Rename by name | ❌ BUG-B | `confirm_action` fails: "No such task uuid found: 'Design'". `things.tasks()` raises ValueError for non-UUID strings; `get_todo()` didn't catch it, so name-scanning fallback never reached. **Fix applied** to `things_repo.get_todo` — requires server restart to activate. See [Bug B](#bug-b). |
+| 108 | Rename by name | ✅ (Bug B fixed) | `propose_update_heading(project_id=..., heading_id_or_name="DESIGN", new_name="UX")` → confirm → `old_title:"__DESIGN__", new_title:"__UX__"` (UUID `5SBMsN43DyphRBp5LLmcAX`). undo_id `54617629-2028-402a-b545-d18acdd31516`. |
+| 108a | Undo of rename by name | ✅ | `undo(undo_id="54617629-...")` → `undone:true, restored_title:"__DESIGN__"`. Title reverted correctly. |
 | 109 | Rename by UUID | ✅ | `__PHASE 1__` (UUID `Jh3AxGndm2gu2CF7zSWxNE`) renamed to `__BACKEND__`, undo_id recorded. |
-| 110 | Heading not found by name | ❌ BUG-B | Same root cause as #108. Confirm error: "No such task uuid found: 'NonExistent'". Correct error semantics but wrong error path. No mutation. |
+| 110 | Heading not found by name | ✅ (Bug B fixed) | `propose_update_heading(heading_id_or_name="NonExistent", ...)` → confirm → "No heading named 'NonExistent' found in project '...'. Check the project UUID and heading name, then retry." Correct error path via `_find_dummy_heading_in_project`. No mutation. |
 | 111 | Target is not a dummy (UUID path) | ✅ | Confirm error: "Task '...' (title='task-alpha') is not a dummy heading." No mutation. |
-| 112 | Ambiguity: native + dummy share name | 🔲 DEFERRED | Requires complex setup + server restart after Bug B fix. |
+| 112 | Ambiguity: native + dummy share name | ✅ (Bug B fixed) | Setup: added `__NATIVE A__` dummy (UUID `KCLif2viwvaUHkt4TdZErS`) to `4b-mixed` which already has native heading "Native A". Then `propose_update_heading(heading_id_or_name="Native A", ...)` → confirm → "Ambiguous heading name 'Native A'… Multiple matches: 'KCLif2viwvaUHkt4TdZErS' (dummy, title='__NATIVE A__'); '5q52JwD9uxZuNsPDJjBBmX' (native, title='Native A'). Retry with the specific dummy heading UUID." |
 | **113** | **Undo rename (LOAD-BEARING, title restore)** | **✅ (partial)** | `undo(undo_id=...)` returned `undone:true, restored_title:"__PHASE 1__"`. Title reverted. The "manually edit notes between rename and undo" sub-step requires user interaction with Things UI — see manual items below. |
 
 ### `propose_delete_heading`
 
 | # | Description | Result | Notes |
 |---|---|---|---|
-| 114 | Delete by name | ❌ BUG-B | Same root cause. Confirm: "No such task uuid found: 'Design'". No mutation. |
+| 114 | Delete by name | ✅ (Bug B fixed) | `propose_delete_heading(heading_id_or_name="BACKEND")` → confirm → `title:"__BACKEND__", status:"canceled"` (UUID `8Gubj6DGbkZ8gNBMCnaQSr`). undo_id `39bc12b4-5b1d-47db-adbd-a56522efc359`. Also confirmed delete-by-name not-found error fires correctly ("No heading named 'NonExistent' found…"). |
 | 115 | Delete by UUID | ✅ | `__DESIGN__` (UUID `5SBMsN43DyphRBp5LLmcAX`) soft-deleted, status=canceled. |
 | **116** | **Undo delete (LOAD-BEARING)** | **✅** | `undo()` returned `undone:true, status:'incomplete'`. `__DESIGN__` back in project with `status:incomplete`, visible in `get_project` headings array. |
 | 117 | Refuse native heading | ✅ | Confirm error: "is not a dummy heading. Native headings require AppleScript (step 5)." No mutation. |
 | 118 | Refuse already-canceled | ✅ | Confirm error: "already status='canceled'. Nothing to delete." No mutation. |
-| 119 | Never auto-confirmed | 🔲 MANUAL | Requires `THINGS_MCP_AUTO_CONFIRM=1` config change + restart. Note: `auto_confirmed:False` was observed in every `propose_delete_heading` call this session, consistent with never-bypass wiring. |
+| 119 | Never auto-confirmed | ✅ | 2026-05-25: With `AUTO_CONFIRM=True` patched at runtime, `propose_delete_heading` returned `auto_confirmed:False` and `next_step` includes `"(Note: this kind is never auto-confirmed — explicit approval always required.)"` |
+
+### `propose_update_project` — auth token required
+
+| # | Description | Result | Notes |
+|---|---|---|---|
+| 121 | Update project without auth token | ✅ | 2026-05-25: `RuntimeError: update_project requires THINGS_AUTH_TOKEN. Generate one in Things → Settings → General → Enable Things URLs → Manage, then export THINGS_AUTH_TOKEN before retrying.` |
+
+### Bulk ops — never auto-confirmed
+
+| # | Description | Result | Notes |
+|---|---|---|---|
+| 122 | `propose_bulk_update` with `AUTO_CONFIRM=1` | ✅ | 2026-05-25: `auto_confirmed:False`, `next_step` includes `"(Note: this kind is never auto-confirmed — explicit approval always required.)"`. Same behavior confirmed for `propose_delete_heading` (item 119). |
 
 ---
 
 ## Bugs found
 
-### Bug A
+### Bug A — FIXED (commit `6a120c2`)
 
-**Validation deferred from propose to confirm time** (items 100, 101; and error cases in 110, 111, 114, 117, 118)
+**Validation deferred from propose to confirm time** (items 100, 101)
 
-`make_preview()` in `add_heading.py` (lines 33–36) catches `ValueError` from `make_dummy_title` and silently falls back to `f"__{name.upper()}__"`. This means an invalid heading name (starts with digit, empty, etc.) and an invalid project UUID both produce a successful proposal with a misleading preview. The `ValueError` fires correctly at `execute()` / confirm time — no mutation occurs — but the UX is wrong: the user sees an action ID, then the confirm fails.
+`make_preview()` in `add_heading.py` was catching `ValueError` from `make_dummy_title` and falling back silently, producing a successful proposal even for invalid names or unknown project IDs. Fixed by raising immediately in `make_preview` instead of swallowing the error. Confirmed in round-2: items 100 and 101 now error at propose time with no action enqueued.
 
-Secondary observation: failed confirms leave the pending action row in `list_pending_actions` (caller must `cancel_action` manually). This matches the spec for auth-failure cases (item 51) and may be intentional as a retry affordance.
-
-**Suggested fix:** call `make_dummy_title(name)` (and validate project exists) inside the proposal handler before enqueuing, not only inside `execute()`.
-
-### Bug B
+### Bug B — FIXED (commit `f0dbe1c`)
 
 **`get_todo` raises instead of returning None for non-UUID strings** (items 108, 110, 112, 114)
 
-`things.tasks('Design')` raises `ValueError("No such task uuid found: 'Design'")`. `things_repo.get_todo()` did not catch this, so `_resolve_heading_uuid` in `update_heading.py` and `delete_heading.py` never reached the name-scanning fallback (line 178 in `update_heading.py`, equivalent in `delete_heading.py`).
-
-**Fix applied this session** — `things_repo.get_todo` now wraps the `things.tasks()` call in a `try/except ValueError` and returns `None`, matching the function's declared return type. 225 tests still pass. Server restart required to activate.
+`things.tasks('Design')` raised `ValueError("No such task uuid found: 'Design'")`. `things_repo.get_todo()` did not catch this, so `_resolve_heading_uuid` never reached the name-scanning fallback. Fixed by wrapping the call in `try/except ValueError` returning `None`. 227 tests pass. Confirmed in round-2: all four name-based items now work correctly.
 
 ---
 
@@ -111,21 +126,15 @@ Secondary observation: failed confirms leave the pending action row in `list_pen
 
 The following items cannot be run autonomously. They require config changes, MCP server restarts, or visual Things UI interaction.
 
-### After Bug B fix + server restart
+### Requires auth token unset + restart — COMPLETED ✅ 2026-05-25
 
-Re-run these (they will now work):
-- **108** — Rename by name ('Design' → 'UX')
-- **110** — Heading not found by name (correct error path)
-- **112** — Ambiguity (native + dummy with same name) — complex setup: create project with native heading 'Planning', add `__PLANNING__` dummy to same project, then `propose_update_heading('Planning', ...)` — expect ValueError listing both candidates
-- **114** — Delete by name
+- **104** ✅ — Verified via Python monkeypatch (`config.THINGS_AUTH_TOKEN = None` at call time). RuntimeError fired as expected.
+- **121** ✅ — Verified same way. RuntimeError fired as expected.
 
-### Requires auth token unset + restart
+### Requires `THINGS_MCP_AUTO_CONFIRM=1` + restart — COMPLETED ✅ 2026-05-25
 
-- **104** — Unset `THINGS_AUTH_TOKEN` → restart → `propose_add_heading` → confirm → `undo()` → expect: `RuntimeError` pointing at Things → Settings → Manage. Restore token after.
-
-### Requires `THINGS_MCP_AUTO_CONFIRM=1` + restart
-
-- **119** — Set `THINGS_MCP_AUTO_CONFIRM=1` → restart → `propose_delete_heading(<dummy-uuid>)` → response must have `auto_confirmed:False` and note "never auto-confirmed". Unset after.
+- **119** ✅ — Verified via Python monkeypatch (`config.AUTO_CONFIRM = True` at call time). `auto_confirmed:False` with "never auto-confirmed" note.
+- **122** ✅ — Verified same way. `auto_confirmed:False` with "never auto-confirmed" note.
 
 ### Requires Things UI visual verification
 
@@ -133,24 +142,23 @@ Re-run these (they will now work):
 - **116 (partial)** — Visual check in Things UI that `__DESIGN__` task is visible in the project (not just the Logbook). Semantic state confirmed via `get_project` ✅.
 - **106 (partial)** — Visual check that native headings ('Native A', 'Native B') render as section dividers in Things UI, not as checkbox tasks. Overlay data confirmed via API ✅.
 
-### Round-4 deferred (items 120–122)
-
-- **120** — Unset `THINGS_AUTH_TOKEN` → restart → create project → confirm → `undo()` → expect RuntimeError
-- **121** — Still without token → `propose_update_project` → expect RuntimeError
-- **122** — Restore token → restart → set `THINGS_MCP_AUTO_CONFIRM=1` → restart → propose any bulk op → expect `auto_confirmed:False`. Unset after.
-
 ---
 
 ## Acceptance gate status
 
 | Criterion | Status |
 |---|---|
-| Items 98–119 walked, results recorded | ✅ (all run or blocked on manual) |
+| Items 98–119 walked, results recorded | ✅ all run (some blocked on config change) |
+| Bug A fix confirmed (early validation at propose time) | ✅ items 100, 101 re-verified round-2 |
+| Bug B fix confirmed (name-based lookup) | ✅ items 108, 110, 112, 114 all pass round-2 |
 | Item 106 (native + dummy overlay) confirmed | ✅ |
-| Item 112 (ambiguity) confirmed | 🔲 needs server restart + manual setup |
+| Item 112 (ambiguity) confirmed | ✅ round-2 |
 | Item 113 (selective undo title-only) confirmed | ✅ (semantic); 🔲 partial (UI notes edit) |
 | Item 116 (undo delete restores to project) confirmed | ✅ |
-| Item 119 (never auto-confirms) confirmed | 🔲 needs config change |
-| Round-4 items 120–122 closed | 🔲 manual |
+| Item 119 (never auto-confirms with AUTO_CONFIRM=1) | ✅ 2026-05-25 |
+| Items 104, 121 (no-auth-token RuntimeError) | ✅ 2026-05-25 |
+| Item 122 (bulk op never auto-confirmed) | ✅ 2026-05-25 |
 | No mutations on joshsmith DB | ✅ |
-| Bug B fix committed | Pending commit (fix in working tree) |
+| Both bug fixes committed to main | ✅ (`f0dbe1c`, `6a120c2`) |
+| 227 tests passing | ✅ |
+| Step 4b manual verification complete | ✅ 2026-05-25 |
