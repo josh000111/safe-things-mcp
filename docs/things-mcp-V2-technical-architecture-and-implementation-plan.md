@@ -335,6 +335,7 @@ Verification expands at each step:
 - Each new handler gets a `test_handler_<kind>.py` with execute / undo / preview tests.
 - Each new propose tool gets a round-trip test in `test_dispatcher.py`.
 - Each new manual checklist item appended to `tests/things-mcp-manual-verification.md`.
+- Each build chunk ends with a **handoff doc** at `tests/handoff-<chunk-name>.md` containing the preflight checklist and numbered manual verification items for the Test user to run. See existing `tests/handoff-round-4-chunks-D-and-E.md` as the template.
 
 ### Phase 3 — Hardening
 
