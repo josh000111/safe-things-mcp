@@ -233,3 +233,25 @@ These items from Round 4 require a config-change + restart. Run them before the 
 120. **(Item #73 deferred)** Unset `THINGS_AUTH_TOKEN` → restart → call `undo()` on a recent `add_project` action (create one first if needed). Expect clean RuntimeError pointing at Things → Settings → Manage.
 121. **(Item #82 deferred)** Still without auth token → propose an `update_project`. Expect actionable RuntimeError.
 122. **(Item #97 deferred)** Restore `THINGS_AUTH_TOKEN` → restart → set `THINGS_MCP_AUTO_CONFIRM=1` → restart → propose any bulk op (e.g. `propose_bulk_complete`). Response must have `auto_confirmed: False`. Unset `THINGS_MCP_AUTO_CONFIRM` after.
+
+---
+
+## Pre-release fix A — Tag pre-validation
+
+### `add_inbox_todo` with unknown tag
+123. **Unknown tag rejected** — *"Add a to-do to the Inbox titled 'Tag validation test' with tags ['NonExistentTag999']."* Expect a `ValueError` naming `NonExistentTag999` and listing the available tags from Things. No task appears in the Things Inbox.
+124. **Known tag accepted** — *"Add a to-do to the Inbox titled 'Tag validation success' with tags ['Errand']."* (Use a tag that actually exists in the Test account's Things.) Succeeds. Task appears in Inbox with the Errand tag applied — confirm in Things UI.
+125. **Propose-time rejection for propose tools** — *"Propose updating to-do `<any-valid-uuid>` with tags ['FakeTag']."* Expect `ValueError` returned immediately at propose stage — no pending action is created. Confirm `list_pending_actions()` does not include a new entry.
+126. **`propose_bulk_update` with mixed tags** — *"Propose bulk updating todos `[<uuid1>, <uuid2>]` with tags=['Errand', 'GhostTag']."* Expect `ValueError` at propose stage naming `GhostTag` and listing available tags. No pending action created.
+
+---
+
+## Pre-release fix B — Tags in read responses
+
+### `get_todo` tag field
+127. **Tag round-trip via `get_todo`** — In the Things UI, open the Test account and tag a to-do (e.g. the task you created in #124) with a tag (e.g. "Errand"). Call `get_todo(<uuid>)`. Response must include `"tags": ["Errand"]` (or similar list). The field must be present and populated.
+128. **Task with no tags returns empty list** — Find (or create) a to-do in the Test account with no tags. Call `get_todo(<uuid>)`. Response must include `"tags": []` — the key must be present, not absent.
+
+### `get_project` tag field
+129. **Project with tags** — In the Things UI, assign a tag to a project in the Test account. Call `get_project(<project_uuid>)`. The response's top-level dict must include `"tags": [...]` with the tag name(s). Confirm they match what the Things UI shows.
+130. **Project with no tags** — Call `get_project` on an untagged project. Response must include `"tags": []` at the top level.
