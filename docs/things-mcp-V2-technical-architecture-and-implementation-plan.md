@@ -2,25 +2,34 @@
 
 > **Master copy.** This file lives at `/Users/Shared/things-mcp/docs/things-mcp-V2-technical-architecture-and-implementation-plan.md`. Edit here, not in `~/.claude/plans/`.
 
-## 0. Implementation Status (as of 2026-05-19)
+## 0. Implementation Status (as of 2026-05-25)
 
-| Phase | Status |
-| --- | --- |
-| V1 — Read + Inbox-create via URL scheme | ✅ Shipped, manually verified |
-| V1 — HTTP callback retired, DB polling in its place | ✅ Shipped |
-| V2 step 1 — `pending_actions` + `undo_log` CRUD + tests | ✅ Done |
-| V2 step 2 — handler registry + `confirm_action` / `cancel_action` / `list_pending_actions` / `undo` | ✅ Done |
-| V2 step 3 — first `propose_*` (`propose_add_todo`) + round-trip undo test | ✅ Done, manually verified |
-| V2 step 4 chunk A — direct shortcuts (`add_today/anytime/someday_todo`, `complete_todo`) + `upcoming` rejection | ✅ Done, manually verified |
-| V2 step 4 chunk B — `THINGS_MCP_AUTO_CONFIRM` flag + `propose_update_todo` | ✅ Done, manually verified |
-| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done, manually verified (items 56/57 target-validation fix landed post-Round-3) |
-| V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ✅ Done (195 tests passing); **awaiting Round-4 manual verification on Test user** |
-| V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done (195 tests passing); **awaiting Round-4 manual verification on Test user** |
-| V2 step 4b — dummy-heading interim layer (URL-scheme only) | ⏳ Bundled with step 4 |
-| V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ After step 4 user feedback |
-| V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Bundled with step 5 |
+Each phase now tracks two rows: **Build** (automated tests green) and **Manual Testing Session** (verified on `Test` user against real Things).
+
+| Phase | Build | Manual Testing Session |
+| --- | --- | --- |
+| V1 — Read + Inbox-create via URL scheme | ✅ Shipped | ✅ Verified (Round 1) |
+| V1 — HTTP callback retired, DB polling in its place | ✅ Shipped | ✅ Verified (Round 1) |
+| V2 step 1 — `pending_actions` + `undo_log` CRUD + tests | ✅ Done | n/a — unit tests only |
+| V2 step 2 — handler registry + `confirm_action` / `cancel_action` / `list_pending_actions` / `undo` | ✅ Done | n/a — unit tests only |
+| V2 step 3 — `propose_add_todo` + round-trip undo test | ✅ Done | ✅ Verified (Round 1) |
+| V2 step 4 chunk A — direct shortcuts (`add_today/anytime/someday_todo`, `complete_todo`) + `upcoming` rejection | ✅ Done | ✅ Verified (Round 2) |
+| V2 step 4 chunk B — `THINGS_MCP_AUTO_CONFIRM` flag + `propose_update_todo` | ✅ Done | ✅ Verified (Round 2) |
+| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done | ✅ Verified (Round 3 — items 56/57 target-validation fix landed post-run) |
+| V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ✅ Done | ✅ Verified (Round 4 — 27/30 pass, 3 deferred; 0 blocking bugs; see `tests/V2-Round4-chunks-D-E-verification-2026-05-19.md`) |
+| V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done | ✅ Verified (Round 4 — same session; 0 blocking bugs) |
+| V2 step 4b — dummy-heading interim layer (URL-scheme only) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 
 Automated suite: 195 tests, ~1.5s, hermetic (no real Things DB / URL launches).
+
+### Round-4 deferred items (non-blocking)
+Items #73, #82, #97 require a config-change + session restart (token removal or `AUTO_CONFIRM` flag toggle). All three test error paths already covered by unit tests. To close them: unset token → restart → run #73 + #82 → restore token → restart → run #97. Can be batched with Round-5 preflight.
+
+### Known limitations documented in Round 4
+- **Unknown tags silently no-op** — `add_inbox_todo` and `propose_bulk_update` with tags that don't exist in Things report success but Things silently ignores them. Things URL-scheme limitation, not a regression. Low-priority follow-up: add pre-validation against `get_tags()`.
+- **`get_project` / `get_todo` don't return tags** — `things-py` library limitation. Tag verification in tests falls back to direct SQLite reads.
 
 ## 1. Context
 
