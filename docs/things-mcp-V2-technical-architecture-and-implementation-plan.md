@@ -18,7 +18,7 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done | ✅ Verified (Round 3 — items 56/57 target-validation fix landed post-run) |
 | V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ✅ Done | ✅ Verified (Round 4 — 27/30 pass, 3 deferred; 0 blocking bugs; see `tests/V2-Round4-chunks-D-E-verification-2026-05-19.md`) |
 | V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done | ✅ Verified (Round 4 — same session; 0 blocking bugs) |
-| V2 step 4b — dummy-heading interim layer (URL-scheme only) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 4b — dummy-heading interim layer (URL-scheme only) | ✅ Done | ⏳ Manual Testing Session: Not yet run |
 | V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
