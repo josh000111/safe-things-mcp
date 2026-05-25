@@ -86,8 +86,15 @@ def get_todo(uuid: str) -> dict[str, Any] | None:
     it (as a list of tag-name strings) when the task has tags, or omits the
     key entirely otherwise. Update-flavour handlers use this to snapshot
     before-state with tag fidelity.
+
+    ``things.tasks`` raises ``ValueError`` when the argument is not a valid
+    Things UUID (e.g. a plain name string). We treat that as not-found so
+    callers can fall through to name-based scanning without a try/except.
     """
-    row = things.tasks(uuid, **_kw())
+    try:
+        row = things.tasks(uuid, **_kw())
+    except ValueError:
+        return None
     return row if isinstance(row, dict) else None
 
 
