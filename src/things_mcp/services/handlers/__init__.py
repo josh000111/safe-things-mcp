@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from . import (
+    add_heading,
     add_project,
     add_todo,
     bulk_complete,
@@ -30,8 +31,10 @@ from . import (
     bulk_move,
     bulk_update,
     complete_todo,
+    delete_heading,
     delete_todo,
     move_todo,
+    update_heading,
     update_project,
     update_todo,
 )
@@ -59,6 +62,9 @@ REGISTRY: dict[str, Handler] = {
     bulk_delete.KIND: bulk_delete,  # type: ignore[dict-item]
     bulk_move.KIND: bulk_move,  # type: ignore[dict-item]
     bulk_update.KIND: bulk_update,  # type: ignore[dict-item]
+    add_heading.KIND: add_heading,  # type: ignore[dict-item]
+    update_heading.KIND: update_heading,  # type: ignore[dict-item]
+    delete_heading.KIND: delete_heading,  # type: ignore[dict-item]
 }
 
 

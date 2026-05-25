@@ -23,14 +23,17 @@ from mcp.server.fastmcp import FastMCP
 
 from .. import config
 from ..models import (
+    ProposeAddHeadingInput,
     ProposeAddProjectInput,
     ProposeAddTodoInput,
     ProposeBulkCompleteInput,
     ProposeBulkDeleteInput,
     ProposeBulkMoveInput,
     ProposeBulkUpdateInput,
+    ProposeDeleteHeadingInput,
     ProposeDeleteTodoInput,
     ProposeMoveTodoInput,
+    ProposeUpdateHeadingInput,
     ProposeUpdateProjectInput,
     ProposeUpdateTodoInput,
 )
@@ -316,6 +319,89 @@ async def propose_bulk_update(
     )
 
 
+# ---------- heading tools ----------
+
+
+async def propose_add_heading(
+    project_id: str,
+    name: str,
+    after_todo_id: str | None = None,
+) -> dict:
+    """Propose adding a dummy heading to an existing project.
+
+    Creates a to-do titled ``__NAME__`` (all-caps between double
+    underscores) inside the project. This is a URL-scheme-only workaround —
+    position via ``after_todo_id`` is accepted but NOT honored (ordering
+    requires AppleScript, arriving in step 5). The dummy task is visible
+    in Things as a regular to-do (with underscores). Use
+    ``convert_dummy_to_native_heading`` (step 6) to upgrade it later.
+
+    Undo soft-deletes the dummy task. Requires ``THINGS_AUTH_TOKEN`` only
+    for undo.
+    """
+    payload_model = ProposeAddHeadingInput(
+        project_id=project_id, name=name, after_todo_id=after_todo_id
+    )
+    payload = payload_model.model_dump()
+    preview = handlers.add_heading.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.add_heading.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_update_heading(
+    project_id: str,
+    heading_id_or_name: str,
+    new_name: str,
+) -> dict:
+    """Propose renaming a dummy heading inside a project.
+
+    ``heading_id_or_name`` is either the UUID of the dummy heading task
+    or the heading's current name. If both a native heading and a dummy
+    share the same name, the tool raises with a list of candidates and
+    asks you to retry with the specific UUID.
+
+    Only dummy headings can be renamed here — native heading rename
+    requires AppleScript (step 5). Requires ``THINGS_AUTH_TOKEN``.
+    """
+    payload_model = ProposeUpdateHeadingInput(
+        project_id=project_id,
+        heading_id_or_name=heading_id_or_name,
+        new_name=new_name,
+    )
+    payload = payload_model.model_dump()
+    preview = handlers.update_heading.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.update_heading.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_delete_heading(
+    project_id: str,
+    heading_id_or_name: str,
+) -> dict:
+    """Propose soft-deleting a dummy heading task inside a project.
+
+    ``heading_id_or_name`` is the UUID of the dummy task or the heading
+    name. The dummy task is moved to the Logbook (canceled+completed).
+    Use ``undo()`` to restore it.
+
+    Only dummy headings can be deleted here — native heading delete
+    requires AppleScript (step 5).
+
+    **Never auto-confirmed.** Requires ``THINGS_AUTH_TOKEN``.
+    """
+    payload_model = ProposeDeleteHeadingInput(
+        project_id=project_id,
+        heading_id_or_name=heading_id_or_name,
+    )
+    payload = payload_model.model_dump()
+    preview = handlers.delete_heading.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.delete_heading.KIND, payload=payload, preview=preview
+    )
+
+
 # ---------- shared helper ----------
 
 
@@ -381,3 +467,6 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_bulk_delete)
     mcp.tool()(propose_bulk_move)
     mcp.tool()(propose_bulk_update)
+    mcp.tool()(propose_add_heading)
+    mcp.tool()(propose_update_heading)
+    mcp.tool()(propose_delete_heading)

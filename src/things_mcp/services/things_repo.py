@@ -153,3 +153,45 @@ def find_recent_by_title(title: str, created_after: str) -> dict[str, Any] | Non
         return None
     matches.sort(key=lambda t: t.get("created") or "", reverse=True)
     return matches[0]
+
+
+def get_project_with_headings(project_id: str) -> dict[str, Any] | None:
+    """Return a project row augmented with a unified ``headings`` list.
+
+    The ``headings`` list contains entries for BOTH native Things headings
+    and dummy heading tasks (``__NAME__`` pattern), each with:
+        {kind: "native"|"dummy", id: str, name: str, position: int}
+
+    ``position`` is the 0-based index within the project's ``items`` list.
+    Dummy heading tasks are still present in ``items`` (the user sees them
+    as regular tasks in Things); the ``headings`` key is an additional
+    overlay so the agent can reason about structure.
+    """
+    from .handlers.dummy_heading import is_dummy_heading, extract_name_from_dummy
+
+    proj = project(project_id)
+    if proj is None:
+        return None
+
+    headings: list[dict[str, Any]] = []
+    for position, item in enumerate(proj.get("items") or []):
+        item_type = item.get("type", "")
+        item_title = item.get("title", "")
+        item_uuid = item.get("uuid", "")
+
+        if item_type == "heading":
+            headings.append({
+                "kind": "native",
+                "id": item_uuid,
+                "name": item_title,
+                "position": position,
+            })
+        elif item_type == "to-do" and is_dummy_heading(item_title):
+            headings.append({
+                "kind": "dummy",
+                "id": item_uuid,
+                "name": extract_name_from_dummy(item_title),
+                "position": position,
+            })
+
+    return {**proj, "headings": headings}

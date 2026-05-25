@@ -67,8 +67,14 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def get_project(project_id: str) -> dict[str, Any] | None:
-        """Single project with its to-dos, headings, and notes (via `items`)."""
-        return things_repo.project(project_id)
+        """Single project with its to-dos, headings, and notes (via ``items``).
+
+        The response includes a ``headings`` list containing both native Things
+        section headings and dummy heading tasks (``__NAME__`` format), each
+        with ``kind``, ``id``, ``name``, and ``position`` fields. Dummy heading
+        tasks are also present in ``items`` as regular to-dos.
+        """
+        return things_repo.get_project_with_headings(project_id)
 
     @mcp.tool()
     def get_todo(todo_id: str) -> dict[str, Any] | None:
