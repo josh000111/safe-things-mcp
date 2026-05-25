@@ -171,7 +171,7 @@ def _resolve_heading_uuid(project_id: str, heading_id_or_name: str) -> str:
         names = ", ".join(c["uuid"] for c in native_candidates)
         raise ValueError(
             f"Heading {heading_id_or_name!r} exists as a native heading (UUID(s): {names}) "
-            "in project {project_id!r} but native headings cannot be deleted with "
+            f"in project {project_id!r} but native headings cannot be deleted with "
             "delete_heading. Native heading deletion requires AppleScript (step 5)."
         )
 

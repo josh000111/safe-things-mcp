@@ -220,7 +220,7 @@ def _find_dummy_heading_in_project(project_id: str, name: str) -> list[dict]:
             candidates.append({"uuid": item_uuid, "title": item_title, "kind": "native"})
         elif item_type == "to-do" and is_dummy_heading(item_title):
             extracted = extract_name_from_dummy(item_title)
-            if extracted.lower() == name.upper().lower():
+            if extracted.lower() == name.lower():
                 candidates.append({"uuid": item_uuid, "title": item_title, "kind": "dummy"})
 
     return candidates
