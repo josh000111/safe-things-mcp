@@ -257,6 +257,23 @@ class ProposeBulkUpdateInput(BaseModel):
         return self
 
 
+class ProposeAddHeadingInput(BaseModel):
+    project_id: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1, max_length=200, description="Heading name (will be stored as __NAME__ dummy task title)")
+    after_todo_id: str | None = Field(default=None, description="Hint for position (not honored by URL-scheme layer; acknowledged in preview)")
+
+
+class ProposeUpdateHeadingInput(BaseModel):
+    project_id: str = Field(..., min_length=1)
+    heading_id_or_name: str = Field(..., min_length=1, description="UUID of the dummy heading task, or its current name")
+    new_name: str = Field(..., min_length=1, max_length=200)
+
+
+class ProposeDeleteHeadingInput(BaseModel):
+    project_id: str = Field(..., min_length=1)
+    heading_id_or_name: str = Field(..., min_length=1, description="UUID of the dummy heading task, or its name")
+
+
 class HealthReport(BaseModel):
     things_db_path: str
     things_db_exists: bool

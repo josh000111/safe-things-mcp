@@ -30,6 +30,7 @@ AUTO_CONFIRM = os.environ.get("THINGS_MCP_AUTO_CONFIRM", "").strip().lower() in 
 # place when those handlers ship.
 NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
     "delete_todo",
+    "delete_heading",
     "bulk_delete",
     "bulk_complete",
     "bulk_move",
