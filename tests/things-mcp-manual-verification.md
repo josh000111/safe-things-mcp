@@ -187,3 +187,49 @@ Setup: ensure you have 3+ throwaway Inbox tasks (titles like `bulk-1`, `bulk-2`,
 
 ### Never-bypass cross-check
 97. **AUTO_CONFIRM=1 doesn't bypass bulk** — set `THINGS_MCP_AUTO_CONFIRM=1` in Claude Desktop config, restart. Propose any bulk op. Response has `auto_confirmed: False` and a note about "never auto-confirmed". Confirm + undo as usual. Unset AUTO_CONFIRM after.
+
+# V2 manual verification checklist — Step 4b (dummy-heading layer)
+
+Same ground rules: **Test** user only. `whoami` first. Restart Claude Desktop to reload the MCP server. `THINGS_AUTH_TOKEN` must be set (update and delete heading need it; add_heading undo also needs it).
+
+**Background:** The Things URL scheme cannot create standalone headings inside existing projects. Step 4b ships a URL-scheme-only workaround: headings are represented as regular to-dos with the title format `__NAME__` (leading and trailing double underscores, all-caps name between). These are visible in the Things UI as ordinary tasks. Real native headings (rendered as section dividers) are created at project birth via the JSON endpoint (`propose_add_project` with `headings=[...]`), or via AppleScript in step 5.
+
+Setup: ensure you have one or more projects with a few to-dos. Create a dedicated scratch project (e.g. "4b-test") via `propose_add_project` for write tests.
+
+### `propose_add_heading` — basic
+98. **Add a dummy heading** — pick a project uuid (e.g. your "4b-test" project). *"Propose adding a heading named 'Design' to project `<uuid>`."* Confirm. In Things: a task titled `__DESIGN__` appears in the project. `recent_undo_log()` shows one `add_heading` row.
+99. **Name with spaces and special chars** — *"Propose adding heading 'Phase 1' to project `<uuid>`."* Confirm. Task titled `__PHASE 1__` appears.
+100. **Invalid name (starts with digit)** — *"Propose adding heading '1st Sprint' to project `<uuid>`."* Expect a clean ValueError (name after uppercasing must start with a letter). No mutation.
+101. **Project not found** — *"Propose adding heading 'Test' to project 'FAKE-UUID'."* Expect ValueError about project not found.
+102. **after_todo_id hint acknowledged** — *"Propose adding heading 'Backend' to project `<uuid>` after_todo_id='<some-task-uuid>'."* Confirm. Task `__BACKEND__` created. The result includes an `after_todo_id_note` acknowledging the hint was received but not honoured. Position may not match the hint — that's expected.
+
+### `propose_add_heading` — undo
+103. **Undo a heading add** — after #98, call `undo()`. The `__DESIGN__` task moves to the Logbook (canceled+completed). `recent_undo_log()` shrinks by 1.
+104. **Undo without auth token** — temporarily unset `THINGS_AUTH_TOKEN`, restart. Add a heading (confirm). Then call `undo()`. Expect clean RuntimeError pointing at Things → Settings → Manage. Restore the token after.
+
+### `get_project` — unified headings overlay
+105. **Headings array in get_project** — use `get_project('<uuid>')` on the "4b-test" project that now has at least one dummy heading (from #99, or re-add one). Response includes a `headings` key containing a list. Each entry has `kind`, `id`, `name`, `position`. The dummy heading shows `kind: "dummy"`.
+106. **Native + dummy headings together** — create a project with native headings at birth: `propose_add_project('4b-mixed', headings=['Native A', 'Native B'])`. Confirm. Then add a dummy heading to it (`propose_add_heading`). Confirm. Call `get_project(<uuid>)`. The `headings` array includes both: entries with `kind: "native"` (for Native A, Native B) and `kind: "dummy"` (for the one you added). The `items` list still contains all tasks plus the `__NAME__` dummy task as a regular to-do. **Load-bearing.**
+107. **Empty project** — `get_project` on a project with no items returns `headings: []`.
+
+### `propose_update_heading`
+108. **Rename by name** — *"Propose updating heading 'Design' in project `<uuid>` to new name 'UX'."* (The project must have a `__DESIGN__` dummy heading from a prior step, or add one.) Confirm. Task title changes from `__DESIGN__` to `__UX__` in Things.
+109. **Rename by UUID** — *"Propose updating heading `<dummy-task-uuid>` in project `<uuid>` to new name 'Backend'."* Confirm. Title updated.
+110. **Heading not found** — *"Propose updating heading 'NonExistent' in project `<uuid>`."* Expect ValueError about no heading with that name found.
+111. **Target is not a dummy** — look up the UUID of a regular task in the project. *"Propose updating heading `<regular-task-uuid>` in project `<uuid>` to new name 'Foo'."* Expect ValueError saying the target is not a dummy heading.
+112. **Ambiguous — native and dummy share name** — (complex setup: use `propose_add_project` to create a project that has a native heading named "Planning", then `propose_add_heading` for "Planning" on the same project to create `__PLANNING__`). *"Propose updating heading 'Planning' in project `<uuid>`."* Expect ValueError listing both candidates (native UUID + dummy UUID) and asking you to retry with the specific UUID.
+113. **Undo a rename** — after #108, call `undo()`. Title reverts to `__DESIGN__`. Manually verify in Things.
+
+### `propose_delete_heading`
+114. **Delete by name** — *"Propose deleting heading 'UX' from project `<uuid>`."* (Must exist as `__UX__` from #108 or add a fresh one.) Response has `auto_confirmed: False` (never auto-confirmed). `confirm_action`. The `__UX__` task moves to the Logbook with canceled status.
+115. **Delete by UUID** — find a dummy heading UUID via `get_project`. *"Propose deleting heading `<dummy-uuid>` from project `<uuid>`."* Confirm. Task soft-deleted.
+116. **Undo a delete** — after #114, `undo()`. The `__UX__` task returns to the project with incomplete status.
+117. **Refuse to delete native heading** — look up the UUID of a native heading in a project. *"Propose deleting heading `<native-uuid>` from project `<uuid>`."* Expect ValueError saying native headings require AppleScript (step 5).
+118. **Refuse to delete already-canceled** — try to delete a dummy heading task already in the Logbook (from a prior test, or re-complete one manually in the Things UI). Expect ValueError about already canceled/completed.
+119. **Never auto-confirmed** — set `THINGS_MCP_AUTO_CONFIRM=1`, restart. *"Propose deleting heading `<dummy-uuid>` from project `<uuid>`."* Response must have `auto_confirmed: False`. Unset `THINGS_MCP_AUTO_CONFIRM` after.
+
+### Round-4 deferred items (close at top of this session)
+These items from Round 4 require a config-change + restart. Run them before the step 4b checklist above if possible:
+120. **(Item #73 deferred)** Unset `THINGS_AUTH_TOKEN` → restart → call `undo()` on a recent `add_project` action (create one first if needed). Expect clean RuntimeError pointing at Things → Settings → Manage.
+121. **(Item #82 deferred)** Still without auth token → propose an `update_project`. Expect actionable RuntimeError.
+122. **(Item #97 deferred)** Restore `THINGS_AUTH_TOKEN` → restart → set `THINGS_MCP_AUTO_CONFIRM=1` → restart → propose any bulk op (e.g. `propose_bulk_complete`). Response must have `auto_confirmed: False`. Unset `THINGS_MCP_AUTO_CONFIRM` after.
