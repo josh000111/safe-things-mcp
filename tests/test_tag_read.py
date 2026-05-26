@@ -29,11 +29,11 @@ def test_todo_includes_tags_when_tasks_returns_them(monkeypatch):
     assert result.get("tags") == ["Errand", "Home"]
 
 
-def test_todo_without_tags_key_key_is_absent(monkeypatch):
-    """things.tasks() returning no tags key → todo() result also has no tags key.
+def test_todo_untagged_returns_empty_tags_list(monkeypatch):
+    """things.tasks() returning no tags key → todo() normalises to tags=[].
 
-    Documents the contract: the key is absent (not None or []) when
-    things.tasks() doesn't return it. Callers should use .get('tags', []).
+    Fix B: untagged items must return "tags": [] (key present, empty list)
+    so callers never have to guard against a missing key.
     """
     untagged_row = {
         "uuid": "abc-456",
@@ -45,8 +45,8 @@ def test_todo_without_tags_key_key_is_absent(monkeypatch):
 
     result = things_repo.todo("abc-456")
     assert result is not None
-    # Document: tags key is absent when things.tasks() doesn't include it
-    assert "tags" not in result or result["tags"] in (None, [])
+    assert "tags" in result
+    assert result["tags"] == []
 
 
 def test_todo_returns_none_when_tasks_raises_value_error(monkeypatch):
@@ -92,6 +92,25 @@ def test_project_includes_tags_when_tasks_returns_them(monkeypatch):
     assert result.get("tags") == ["Errand"]
     # Confirm the call was made with type="project"
     assert any(c.get("type") == "project" for c in calls)
+
+
+def test_project_untagged_returns_empty_tags_list(monkeypatch):
+    """things.tasks() returning no tags key → project() normalises to tags=[].
+
+    Fix B: untagged projects must return "tags": [] (key present, empty list).
+    """
+    untagged_proj = {
+        "uuid": "proj-456",
+        "type": "project",
+        "title": "Untagged project",
+        "status": "incomplete",
+    }
+    monkeypatch.setattr("things.tasks", lambda uuid, **_: untagged_proj)
+
+    result = things_repo.project("proj-456")
+    assert result is not None
+    assert "tags" in result
+    assert result["tags"] == []
 
 
 def test_project_returns_none_when_tasks_returns_list(monkeypatch):

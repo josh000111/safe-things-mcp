@@ -21,8 +21,8 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 4b — dummy-heading interim layer (URL-scheme only) | ✅ Done | ✅ Verified (Round 5 — 227 tests pass; items 98–122 all pass; see tests/V2-step-4b-verification-2026-05-25.md) |
 | V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
-| **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ✅ Done | ⏳ Manual Testing Session: Not yet run |
-| **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ✅ Done | ⏳ Manual Testing Session: Not yet run |
+| **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
+| **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | Round-4 deferred items #73, #82, #97 — error-path manual verification | n/a — no build needed | ⏳ Run during Round-5 preflight (config-change + restart sequence) |
 
 Automated suite: 227 tests, ~1.5s, hermetic (no real Things DB / URL launches).

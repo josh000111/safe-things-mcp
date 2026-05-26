@@ -66,7 +66,10 @@ def project(project_id: str) -> dict[str, Any] | None:
     field is present in the response.
     """
     row = things.tasks(project_id, type="project", **_kw())
-    return row if isinstance(row, dict) else None
+    if isinstance(row, dict):
+        row.setdefault("tags", [])
+        return row
+    return None
 
 
 def todo(todo_id: str) -> dict[str, Any] | None:
@@ -79,7 +82,10 @@ def todo(todo_id: str) -> dict[str, Any] | None:
         row = things.tasks(todo_id, **_kw())
     except ValueError:
         return None
-    return row if isinstance(row, dict) else None
+    if isinstance(row, dict):
+        row.setdefault("tags", [])
+        return row
+    return None
 
 
 def tags(include_items: bool = False) -> list[dict[str, Any]]:
