@@ -32,6 +32,7 @@ from ..models import (
     ProposeBulkUpdateInput,
     ProposeDeleteHeadingInput,
     ProposeDeleteTodoInput,
+    ProposeHardDeleteTodoInput,
     ProposeMoveTodoInput,
     ProposeUpdateHeadingInput,
     ProposeUpdateProjectInput,
@@ -166,6 +167,31 @@ async def propose_delete_todo(todo_id: str) -> dict:
     preview = handlers.delete_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_todo.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_hard_delete_todo(todo_id: str) -> dict:
+    """Propose hard-deleting a to-do by moving it to Things Trash.
+
+    Unlike soft-delete (``propose_delete_todo``), this uses AppleScript to
+    move the task to Things Trash. Undo uses AppleScript to restore it.
+    Things auto-empties Trash after 30 days.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+
+    **Never auto-confirmed.** Even with ``THINGS_MCP_AUTO_CONFIRM=1`` the
+    user must call ``confirm_action`` explicitly.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_hard_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Set the environment variable and restart the MCP server."
+        )
+    payload_model = ProposeHardDeleteTodoInput(todo_id=todo_id)
+    payload = payload_model.model_dump()
+    preview = handlers.hard_delete_todo.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.hard_delete_todo.KIND, payload=payload, preview=preview
     )
 
 
@@ -466,6 +492,7 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_update_todo)
     mcp.tool()(propose_move_todo)
     mcp.tool()(propose_delete_todo)
+    mcp.tool()(propose_hard_delete_todo)
     mcp.tool()(propose_add_project)
     mcp.tool()(propose_update_project)
     mcp.tool()(propose_bulk_complete)

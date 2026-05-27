@@ -24,6 +24,18 @@ AUTO_CONFIRM = os.environ.get("THINGS_MCP_AUTO_CONFIRM", "").strip().lower() in 
     "1", "true", "yes", "on",
 }
 
+# When set, AppleScript-backed operations (hard-delete, reorder) are enabled.
+# Default off — requires explicit opt-in.
+ALLOW_APPLESCRIPT = os.environ.get("THINGS_MCP_ALLOW_APPLESCRIPT", "").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+
+# When set, enables the experimental reorder command (requires ALLOW_APPLESCRIPT too).
+# Default off.
+ALLOW_EXPERIMENTAL_REORDER = os.environ.get(
+    "THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER", ""
+).strip().lower() in {"1", "true", "yes", "on"}
+
 # Action kinds that must NEVER auto-confirm, regardless of THINGS_MCP_AUTO_CONFIRM.
 # Anything destructive or multi-target lives here. New kinds added in later
 # chunks (chunk C delete, chunk E bulk_*) are pre-listed so the gate is in
@@ -31,6 +43,7 @@ AUTO_CONFIRM = os.environ.get("THINGS_MCP_AUTO_CONFIRM", "").strip().lower() in 
 NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
     "delete_todo",
     "delete_heading",
+    "hard_delete_todo",
     "bulk_delete",
     "bulk_complete",
     "bulk_move",

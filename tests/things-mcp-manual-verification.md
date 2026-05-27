@@ -255,3 +255,23 @@ These items from Round 4 require a config-change + restart. Run them before the 
 ### `get_project` tag field
 129. **Project with tags** — In the Things UI, assign a tag to a project in the Test account. Call `get_project(<project_uuid>)`. The response's top-level dict must include `"tags": [...]` with the tag name(s). Confirm they match what the Things UI shows.
 130. **Project with no tags** — Call `get_project` on an untagged project. Response must include `"tags": []` at the top level.
+
+---
+
+## Step 5A — AppleScript foundation + hard-delete
+
+**Pre-flight:** confirm `THINGS_MCP_ALLOW_APPLESCRIPT=1` is set in Claude Desktop config and the server has been restarted. Verify with `health()` → `applescript_enabled: true`.
+
+### `propose_hard_delete_todo`
+
+131. **Flag-off clean error** — With `THINGS_MCP_ALLOW_APPLESCRIPT` unset (or `0`) in the MCP server config, restart Claude Desktop. Call `propose_hard_delete_todo(todo_id=<any-valid-uuid>)`. Expect a clean `RuntimeError` naming `THINGS_MCP_ALLOW_APPLESCRIPT`. No pending action created — confirm `list_pending_actions()` does not include a new entry.
+
+132. **Hard-delete round-trip** — Set `THINGS_MCP_ALLOW_APPLESCRIPT=1`, restart. Create a test to-do in the Inbox. Call `propose_hard_delete_todo(todo_id=<uuid>)`. Response has `auto_confirmed: False` (never auto-confirmed). Call `confirm_action(action_id)`. Verify the to-do disappears from all active lists and appears in Things Trash list (Things sidebar → Trash).
+
+133. **Undo restores from Trash** — After item #132, call `undo()`. Verify the to-do returns to the Inbox (or original list). Confirm it is no longer in Things Trash.
+
+### `health()` — AppleScript diagnostic fields
+
+134. **Flags off** — With both `THINGS_MCP_ALLOW_APPLESCRIPT` and `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER` unset, call `health()`. Verify: `applescript_enabled: false`, `experimental_reorder_enabled: false`, `reorder_command_available: null` (or absent), `applescript_authorized: "unknown"` (or `false` — not yet verified).
+
+135. **Both flags on, after first AppleScript call** — With both flags set, restart, then call `propose_hard_delete_todo` (even if it fails) or any tool that triggers `verify_authorization()`. Call `health()`. Verify: `applescript_enabled: true`, `experimental_reorder_enabled: true`, `applescript_authorized: true` (assuming Automation permission is granted), `reorder_command_available: true`.

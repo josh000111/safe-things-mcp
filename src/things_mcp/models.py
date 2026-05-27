@@ -134,6 +134,19 @@ class ProposeDeleteTodoInput(BaseModel):
     todo_id: str = Field(..., min_length=1)
 
 
+class ProposeHardDeleteTodoInput(BaseModel):
+    """V2 step 5A — propose hard-deleting a to-do via AppleScript.
+
+    Moves the task to Things Trash (unlike soft-delete which goes to Logbook).
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+
+    This kind is in ``NEVER_BYPASS_KINDS`` — even with
+    ``THINGS_MCP_AUTO_CONFIRM=1`` the user must explicitly call
+    ``confirm_action``.
+    """
+    todo_id: str = Field(..., min_length=1)
+
+
 class ProposeAddProjectInput(BaseModel):
     """V2 — propose adding a new Things project.
 
@@ -282,3 +295,7 @@ class HealthReport(BaseModel):
     state_db_path: str
     state_db_exists: bool
     url_scheme_auth_token_set: bool
+    applescript_enabled: bool = False
+    experimental_reorder_enabled: bool = False
+    applescript_authorized: bool | str = "unknown"
+    reorder_command_available: bool | None = None
