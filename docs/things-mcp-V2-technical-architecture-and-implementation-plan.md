@@ -2,7 +2,7 @@
 
 > **Master copy.** This file lives at `/Users/Shared/things-mcp/docs/things-mcp-V2-technical-architecture-and-implementation-plan.md`. Edit here, not in `~/.claude/plans/`.
 
-## 0. Implementation Status (as of 2026-05-25)
+## 0. Implementation Status (as of 2026-05-27)
 
 Each phase now tracks two rows: **Build** (automated tests green) and **Manual Testing Session** (verified on `Test` user against real Things).
 
@@ -19,8 +19,10 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ✅ Done | ✅ Verified (Round 4 — 27/30 pass, 3 deferred; 0 blocking bugs; see `tests/V2-Round4-chunks-D-E-verification-2026-05-19.md`) |
 | V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done | ✅ Verified (Round 4 — same session; 0 blocking bugs) |
 | V2 step 4b — dummy-heading interim layer (URL-scheme only) | ✅ Done | ✅ Verified (Round 5 — 227 tests pass; items 98–122 all pass; see tests/V2-step-4b-verification-2026-05-25.md) |
-| V2 step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT`) for hard-delete + reorder | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
-| V2 step 6 — native heading support via AppleScript + dummy→native converter | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 5A — opt-in AppleScript foundation (`THINGS_MCP_ALLOW_APPLESCRIPT` + `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER`) + hard-delete | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 5B — reorder todos in lists/projects (with native-heading auto-conversion to dummies at original positions) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 5C — checklist tools (`get_checklist_items`, append/prepend/replace via URL scheme) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| ~~V2 step 6~~ — native heading support via AppleScript | ❌ **Cancelled** — SDEF inspection confirmed Things 3 AppleScript has no `heading` class. Native-heading CRUD is impossible by any mechanism. Dummy headings (Step 4b) are the permanent solution. See §5.3 and §10. | n/a |
 | **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | Round-4 deferred items #73, #82, #97 — error-path manual verification | n/a — no build needed | ⏳ Run during Round-5 preflight (config-change + restart sequence) |
@@ -33,7 +35,7 @@ Items #73, #82, #97 require a config-change + session restart (token removal or 
 2. Restore `THINGS_AUTH_TOKEN` → restart → set `THINGS_MCP_AUTO_CONFIRM=1` → restart → run item #97 → restore flag.
 
 ### Pre-release requirements surfaced in Round 4
-Both items below **must ship before public release**. They are not blockers for steps 4b / 5 / 6, but they must be fixed and manually verified before the server is published. Full implementation detail is in §11.
+Both items below **must ship before public release**. They are not blockers for steps 4b / 5A / 5B / 5C, but they must be fixed and manually verified before the server is published. Full implementation detail is in §11.
 
 - **Fix A — Unknown tags silently no-op:** `add_inbox_todo` and `propose_bulk_update` (and all other write tools accepting `tags`) report success even when a supplied tag name doesn't exist in Things — Things URL scheme silently ignores unknown tags. A public user has no way to know their tag was dropped. Fix: pre-validate every tag name against `get_tags()` before firing the URL scheme and return a clear error listing available tags if any are unknown.
 - **Fix B — Tags missing from read responses:** `get_project` and `get_todo` return no tag data, meaning an agent cannot tell the user what tags a task has. Root cause is either a `things-py` gap or a missing field in our `things_repo` response shaping — needs diagnosis. Fix: augment responses with a direct read-only SQLite tag lookup if `things-py` doesn't supply them.
@@ -221,14 +223,19 @@ Mutating tools split into two tiers based on risk. **Low-risk direct shortcuts**
 | `propose_add_todo(list_id, ...)` (✅ shipped step 3) | `confirm_action` | Lands in a project / arbitrary list — preview valuable. |
 | `propose_update_todo(todo_id, fields)` | `confirm_action` | Edits live data. |
 | `propose_move_todo(todo_id, target)` | `confirm_action` | Cross-list moves can be hard to find afterward. |
-| `propose_reorder_todos(list_id, order)` | `confirm_action` | **Requires AppleScript fallback (URL scheme can't reorder).** Deferred to step 5. |
+| `propose_reorder_todos(container, new_order)` (step 5B) | `confirm_action` | Single tool with smart container routing: built-in list name (`"Today"`) → `list "Today"`; otherwise project UUID → `project id "X"`. Uses the hidden AppleScript reorder command (see §12). Native-heading projects auto-convert natives to dummies at their original positions; empty natives left at bottom for manual user cleanup. |
 | `complete_todo(todo_id)` (direct, single-target) | n/a — no airlock | Reversible (`update?completed=false`). Most common everyday op. |
 | `propose_bulk_complete([todo_id, ...])` | `confirm_action` | Bulk = preview valuable; never bypassable. |
-| `propose_delete_todo(todo_id)` | `confirm_action` — **never bypassable** | Destructive. Soft-delete first (URL `update?canceled=true&completed=true`); AppleScript hard-delete behind `THINGS_MCP_ALLOW_APPLESCRIPT`. |
+| `propose_delete_todo(todo_id)` | `confirm_action` — **never bypassable** | Soft-delete only — URL `update?canceled=true&completed=true`. Reversible. |
+| `propose_hard_delete_todo(todo_id)` (step 5A) | `confirm_action` — **never bypassable** | AppleScript `delete <todo>` → moves to Things Trash (recoverable from Trash for 30d via `move <todo> to list "Inbox"`). Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`. |
 | `propose_bulk_*(...)` | `confirm_action` — **never bypassable** | Multi-target = high blast radius. |
 | `propose_add_project(...)` | `confirm_action` | Project creation supports headings via `things:///json` payload. |
 | `propose_update_project(...)` | `confirm_action` | Edits live project. |
-| `propose_add_heading(project_id, name)` | `confirm_action` | **Requires AppleScript** (URL scheme `json` endpoint only creates headings inside *new* projects). Deferred to step 5/6. |
+| `propose_add_heading(project_id, name)` (dummy-only, **permanent**) | `confirm_action` | Creates a `__NAME__` dummy task. Native headings inside an *existing* project are not creatable by any scripted mechanism — AppleScript has no `heading` class. See §5.3 and §10. |
+| `propose_update_heading(...)`, `propose_delete_heading(...)` (dummy-only, **permanent**) | `confirm_action` | Operate only on dummy `__NAME__` tasks via URL scheme. Native headings are not mutable by any scripted mechanism. |
+| `propose_append_checklist_items(todo_id, items)` (step 5C) | `confirm_action` | URL scheme `&append-checklist-items=...`. Reversible via `propose_replace_checklist` to prior snapshot. |
+| `propose_prepend_checklist_items(todo_id, items)` (step 5C) | `confirm_action` | URL scheme `&prepend-checklist-items=...`. Same undo strategy. |
+| `propose_replace_checklist(todo_id, items)` (step 5C) | `confirm_action` — **never bypassable** | URL scheme `update?checklist-items=...` overwrites entire checklist. Undo restores prior snapshot. |
 
 **Dispatcher / inspection tools:**
 
@@ -241,42 +248,77 @@ Mutating tools split into two tiers based on risk. **Low-risk direct shortcuts**
 
 **Auto-confirm escape hatch (`THINGS_MCP_AUTO_CONFIRM`):**
 
-When the env var `THINGS_MCP_AUTO_CONFIRM=1` is set, any tool returning a `propose_*` action_id is immediately confirmed inside the same MCP call — the preview is still surfaced to the agent (so the LLM can summarize before responding) but no second round-trip is required. **Exceptions:** `propose_delete_todo` and `propose_bulk_*` always require an explicit `confirm_action` call regardless of this flag. The "never bypassable" column above marks these.
+When the env var `THINGS_MCP_AUTO_CONFIRM=1` is set, any tool returning a `propose_*` action_id is immediately confirmed inside the same MCP call — the preview is still surfaced to the agent (so the LLM can summarize before responding) but no second round-trip is required. **Exceptions:** `propose_delete_todo`, `propose_hard_delete_todo`, `propose_bulk_*`, and `propose_replace_checklist` always require an explicit `confirm_action` call regardless of this flag. The "never bypassable" column above marks these.
 
 **Why two-tier and not one or the other:**
 - Pure airlock is too high-friction for everyday adds.
 - Pure direct tools lose the structured preview / pre-mutation undo-log row that the airlock guarantees for destructive ops.
 - Host-level permissions (Claude Desktop "ask / allow / deny" per tool) sit *on top* of both tiers and are the user's primary "I trust this MCP" knob.
 
-### 5.3 Heading & reorder limitations — and the dummy-heading workaround
+### 5.3 Heading & reorder & checklist limitations — and the dummy-heading permanent layer
 
-The Things URL scheme **does not support**: creating standalone headings inside existing projects, renaming/deleting headings, or reordering tasks within a list. These all require AppleScript.
+**Settled facts from SDEF inspection (2026-05-27):** Things 3 AppleScript has **no `heading` class and no `checklist item` class.** Native-heading CRUD and granular checklist-item operations are therefore impossible by any scripted mechanism — neither URL scheme nor AppleScript exposes them. The dummy heading layer shipped in Step 4b is **the permanent solution, not an interim**; the previously-planned Step 6 has been cancelled.
 
-What the URL scheme *does* support:
-- `things:///add?heading=Name` — adds a to-do under an *existing* heading (no auto-create).
-- `things:///json?data=[{type:project, items:[{type:heading,...},{type:to-do,...}]}]` — creates a new project with headings in one shot.
+#### What IS possible (and how)
 
-`propose_reorder_todos` and real-heading mutations are deferred to step 5 (AppleScript layer). **Step 4b ships a URL-scheme-only interim solution: dummy heading tasks.**
+| Capability | Mechanism |
+| --- | --- |
+| Create a native heading inside a *new* project (at project birth) | URL scheme `things:///json` payload — already used by `propose_add_project`. |
+| Read native heading titles + positions | `things-py` SQLite read — `things_repo.get_project_with_headings` returns unified `[{kind, id, name, position}]`. |
+| Add a to-do under an *existing* native heading | URL scheme `things:///add?heading=Name`. |
+| Reorder todos within a list or project | Hidden AppleScript command (see §12). Gated behind `THINGS_MCP_ALLOW_APPLESCRIPT=1` AND `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER=1`. |
+| Hard-delete a todo (move to Things Trash) | AppleScript `delete <todo>`. Recoverable from Trash for 30 days. |
+| Read a task's checklist items | `things-py` SQLite read — surfaced by `get_checklist_items`. |
+| Append / prepend / replace an entire checklist | URL scheme `&append-checklist-items=` / `&prepend-checklist-items=` / `update?checklist-items=`. |
 
-#### Dummy heading convention (step 4b)
+#### Hard limitations — NOT possible by any mechanism
+
+- **Native heading CRUD inside an existing project** — create, rename, delete. AppleScript has no `heading` class.
+- **Checklist item granular operations** — edit one item's title, complete/uncomplete one item, delete one item, reorder items. No `checklist item` class in AppleScript; URL scheme is all-or-nothing.
+- **Project reorder within an area** — projects have no positional property in the SDEF.
+- **Area reorder in the sidebar** — same.
+- **Empty native heading cleanup after reorder** — when reorder runs on a project containing native headings, the natives are displaced to the bottom of the project and left empty. We can't delete them; the user must remove them manually in the Things UI.
+
+#### Dummy heading convention (permanent — Step 4b)
 
 Title format: `__HEADING_NAME__` — leading and trailing double underscore, all uppercase between. Regex: `^__[A-Z][A-Z0-9 _\-:]*__$`.
 
-| Operation | Dummy-heading behaviour | Real-heading behaviour |
+| Operation | Dummy-heading behaviour | Native-heading behaviour |
 | --- | --- | --- |
-| `propose_add_heading(project_id, name)` | Adds a to-do titled `__NAME__` to the project at the requested position. Position controlled by an optional `after_todo_id` param. | Deferred to step 5 (AppleScript). |
-| `propose_update_heading(heading_id_or_name, new_name)` | If target is a dummy task → URL-scheme `update?title=__NEW_NAME__&auth-token=...`. | Deferred to step 5. |
-| `propose_delete_heading(heading_id_or_name)` | Soft-delete the dummy task via `update?canceled=true&completed=true`. | Deferred to step 5. |
-| `get_project(project_id)` extension | Returns a unified `headings: [{kind: "native" \| "dummy", id, name, position}]` array. Dummy-heading tasks are still present in the project's `items` list (the user sees them as tasks in Things), but also surfaced as headings so the agent can reason about them. | Same shape. |
-| Ambiguity resolution | When the user says "edit/delete heading X" and both a native heading named X AND a dummy `__X__` exist in the same project: `propose_*` returns a preview listing both candidates and asks the user to pick. | Same. |
+| `propose_add_heading(project_id, name)` | Adds a to-do titled `__NAME__` to the project. Position can be set via Step 5B reorder after creation. | Not possible — no `heading` class in AppleScript. |
+| `propose_update_heading(heading_id_or_name, new_name)` | If target is a dummy task → URL-scheme `update?title=__NEW_NAME__&auth-token=...`. | Not possible. |
+| `propose_delete_heading(heading_id_or_name)` | Soft-delete the dummy task via `update?canceled=true&completed=true`. | Not possible. |
+| `get_project(project_id)` extension | Returns a unified `headings: [{kind: "native" \| "dummy", id, name, position}]` array. | Same shape. |
+| Ambiguity resolution | When user says "edit/delete heading X" and both a native heading X AND a dummy `__X__` exist in the same project: `propose_*` returns a preview listing both and asks the user to pick. Only the dummy is actionable; selecting the native returns an explanatory error. | Same. |
 
 Visual caveat: a `__COOKING__` task in the Things UI is rendered as a regular task (with its underscores visible), not as a native section divider. The user can swap a dummy for a real heading manually via the Things UI (`File > New Heading`) at any time; the MCP recognises both forms going forward.
 
-#### Where the workaround fails
+#### Reorder + native headings — the auto-conversion flow (Step 5B)
 
-- Native-heading rename/delete still requires AppleScript (step 5).
+When `propose_reorder_todos` targets a project containing native headings:
+
+1. **Propose-time:** detect the natives, build a `dummy_creation_plan` of `[{name, target_position}]` — one entry per native at the native's original position in the project's items array.
+2. **Execute-time:** create one dummy `__NAME__` task per native at the appropriate slot, splice into the master UUID list, then run the hidden reorder command.
+3. **Side effect:** the natives are displaced to the bottom of the project, empty. The MCP cannot delete them; the user removes them manually.
+4. **Undo:** restores the original task order and soft-deletes the dummies, but cannot reinstate the natives' inline positions. The propose preview must surface this irreversibility caveat before the user confirms.
+
+#### Where the dummy approach still leaks
+
 - Dummy headings can be inadvertently completed by the user from the Things UI, which moves them to the Logbook. The MCP should treat completed dummy-heading tasks the same way Things would — as "gone."
-- Headings inside an `add-project` JSON payload (creating a new project with native headings at birth) ARE supported by the URL scheme. `propose_add_project` will use the JSON endpoint when the input includes a `headings` array — no dummy fallback needed there.
+- Headings inside an `add-project` JSON payload (creating a new project with native headings at birth) ARE supported by the URL scheme. `propose_add_project` will use the JSON endpoint when the input includes a `headings` array — no dummy fallback needed there. The resulting natives are then read-only forever (no rename/delete via script).
+
+### 5.4 Checklist support (Step 5C)
+
+Things 3 task checklists are surfaced read-only via `things-py` and mutable via URL scheme at the *whole-checklist* granularity. Per-item editing, completion, deletion, and reordering are **not supported by Things' scripting surface** and therefore not exposed by the MCP.
+
+| Tool | Mechanism | Notes |
+| --- | --- | --- |
+| `get_checklist_items(todo_id)` | `things-py` SQLite read | Direct read tool (no airlock). Returns `[{title, completed, position}]` in order. |
+| `propose_append_checklist_items(todo_id, items)` | URL scheme `&append-checklist-items=` | Items joined with `\n`. URL-encoded. Undo via `replace_checklist` to prior snapshot. |
+| `propose_prepend_checklist_items(todo_id, items)` | URL scheme `&prepend-checklist-items=` | Same. |
+| `propose_replace_checklist(todo_id, items)` | URL scheme `update?checklist-items=...` | **Never bypassable** (overwrites entire list). Undo restores prior snapshot. |
+
+Tool docstrings + README must explicitly state: *"To change a single item, replace the entire checklist."*
 
 ---
 
@@ -325,18 +367,29 @@ Visual caveat: a `__COOKING__` task in the Things UI is rendered as a regular ta
 4. Extend `get_project(...)` and other read tools to surface dummy headings in a unified `headings` array alongside native ones.
 5. Document the visual caveat (dummies look like regular tasks in Things UI) in README + tool descriptions.
 
-**Step 5 — opt-in AppleScript layer (`THINGS_MCP_ALLOW_APPLESCRIPT=1`):**
-1. `services/applescript.py` — thin `osascript` wrapper, async via `asyncio.to_thread`.
-2. Upgrade `propose_delete_todo` to use real `delete theTask` when flag is set.
-3. `propose_reorder_todos` — URL scheme can't do this; AppleScript-only.
-4. First-run permission popup is documented; `health()` reports `applescript_enabled` + `applescript_authorized`.
+**Step 5 — opt-in AppleScript layer + checklist tools. Split into three sub-chunks for incremental Test-user verification rounds.** Detailed implementation plan in `/Users/joshsmith/.claude/plans/review-docs-things-mcp-v2-technical-arch-declarative-hennessy.md`.
 
-**Step 6 — native heading support (also AppleScript-dependent):**
-1. Upgrade `propose_add_heading` to use AppleScript when flag is set — creates a real Things native heading (not a dummy task). Dummies remain valid alongside.
-2. `propose_update_heading` upgrade — rename a native heading.
-3. `propose_delete_heading` upgrade — delete a native heading.
-4. `convert_dummy_to_native_heading(dummy_task_id)` — utility that creates a native heading at the dummy's position, moves any sub-tasks (if conventionally grouped), then deletes the dummy task.
-5. `add_todo_under_heading(...)` — uses URL scheme `heading=` param (existing headings only); when AppleScript is on, can auto-create.
+**Step 5A — AppleScript foundation + hard-delete:**
+1. `services/applescript.py` — thin async `osascript` wrapper with hardened escaping (`"` → `\"`, `\` → `\\`, reject control chars). `verify_authorization()` runs a no-op script, caches result.
+2. Two env flags in `config.py`: `THINGS_MCP_ALLOW_APPLESCRIPT` (gates all AppleScript) and `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER` (gates the hidden reorder command — see §12). Both default off.
+3. `services/handlers/hard_delete_todo.py` — propose snapshots current state, execute runs AppleScript `delete <todo>` (moves to Things Trash), undo runs `move <todo> to list "<original_list>"`. Always on `NEVER_BYPASS_KINDS`.
+4. `propose_hard_delete_todo(todo_id)` in `tools/write.py`.
+5. `health()` extended with `applescript_enabled`, `experimental_reorder_enabled`, `applescript_authorized`, `reorder_command_available` (SDEF grep for `THGSreot`, cached).
+
+**Step 5B — reorder todos (with native-heading auto-conversion):**
+1. `services/reorder.py` — `build_master_order()` for the Unified Master List Overwrite strategy (partial reorders preserve surrounding positions); `detect_native_headings()`; `resolve_container()` for smart list-vs-project routing.
+2. `services/handlers/reorder_todos.py` — propose-time heading detection (NOT execute-time), dummy_creation_plan built into the payload, race-window check on execute, verification re-read after AppleScript runs.
+3. `propose_reorder_todos(container, new_order)` in `tools/write.py` — single tool, smart routing.
+4. Hidden AppleScript reorder command used internally; never named in user-facing surfaces (see §12).
+
+**Step 5C — checklist tools (URL scheme only, no AppleScript needed):**
+1. `services/url_scheme.py` — add `build_append_checklist_url`, `build_prepend_checklist_url`, `build_replace_checklist_url`.
+2. `services/things_repo.py::get_checklist_items(todo_id)`.
+3. Three handlers (`append_checklist.py`, `prepend_checklist.py`, `replace_checklist.py`) — undo strategy is snapshot-then-replace.
+4. Tools: direct `get_checklist_items`, plus `propose_append_checklist_items`, `propose_prepend_checklist_items`, `propose_replace_checklist` (last is `NEVER_BYPASS_KINDS`).
+5. README and tool docstrings explicitly document the per-item-edit/delete/reorder limitations.
+
+**Step 6 — CANCELLED.** Originally planned for AppleScript-based native heading CRUD + dummy→native converter. SDEF inspection on 2026-05-27 confirmed Things 3 AppleScript has no `heading` class; native heading creation/rename/deletion inside an existing project is impossible by any scripted mechanism. Dummy headings (Step 4b) are therefore the permanent solution. See §5.3 and §10.
 
 Verification expands at each step:
 - Each new handler gets a `test_handler_<kind>.py` with execute / undo / preview tests.
@@ -431,6 +484,8 @@ Each test gets one line in `tests/things-mcp-manual-verification.md` initially, 
 - **JSON file for the undo cache** → replaced by SQLite. Indexed lookups + atomic ops with no extra dependency.
 - **"Tag-as-deleted" soft-delete shim** → unnecessary once we have the undo log with full before-state snapshots and the propose/confirm gate. V2 destructive ops move to Trash (Things-native, via AppleScript when enabled) and we restore from `undo_log`.
 - **HTTP `x-callback-url` listener (`aiohttp` mini-server)** → replaced by DB polling. Reason: macOS routes `http://` callbacks through the default browser, opening a Safari tab per write. Polling has no UX side effect, removes the `aiohttp` dependency, and simplifies the write path. See §4.3.
+- **Native heading CRUD via AppleScript (originally Step 6)** → cancelled. SDEF inspection on 2026-05-27 confirmed Things 3 AppleScript has no `heading` class — creating, renaming, or deleting native headings inside an existing project is impossible by any scripted mechanism. The dummy heading layer shipped in Step 4b is the permanent solution. See §5.3.
+- **Granular checklist item operations (per-item edit / delete / completion / reorder)** → not buildable. Things 3 AppleScript has no `checklist item` class, and the URL scheme operates at whole-checklist granularity only. Step 5C exposes append/prepend/replace + read; document the limitation in tool descriptions.
 
 What survives from the brief: the 3-layer split (read / write / safeguards), the local-only architecture, and the principle that every destructive action must be reversible.
 
@@ -438,7 +493,7 @@ What survives from the brief: the 3-layer split (read / write / safeguards), the
 
 ## 11. Pre-release Fixes (must ship before public release)
 
-Both fixes are self-contained and can be built together in one session after step 6, or pulled forward into an earlier session if convenient. Neither touches the propose/confirm plumbing.
+Both fixes are self-contained and can be built together in one session after step 5C, or pulled forward into an earlier session if convenient. Neither touches the propose/confirm plumbing.
 
 ---
 
@@ -549,10 +604,52 @@ Suggested sequencing:
 
 | When | What |
 | --- | --- |
-| After step 6 is verified | Build Fix A + Fix B together in one session |
+| After step 5C is verified | Build Fix A + Fix B together in one session |
 | Same session | Add unit tests for both |
 | Same session | Produce handoff doc `tests/handoff-pre-release-fixes.md` |
 | Test-user session | Manual verification of Fix A + Fix B items |
 | On pass | Mark both rows ✅ in status table → server is release-ready |
 
-If a blocking bug surfaces during steps 4b–6 that touches the tag or read layer, pull the relevant fix forward rather than waiting.
+> **Note (2026-05-27):** Fixes A and B were originally listed as Round-6 verified in the §0 status table. They are already done — this section is retained for historical context. If a blocking bug surfaces during steps 5A–5C that touches the tag or read layer, treat it as a regression and patch immediately.
+
+---
+
+## 12. Internal-only implementation notes (NOT for README, NOT for public tool docs)
+
+This section is for contributors who clone and audit the repo. **Do not surface any of this in the README, public tool descriptions, log messages, or user-facing error strings.** It is the project's competitive differentiator versus other public Things-MCP implementations on GitHub.
+
+### The hidden reorder command
+
+Things 3's AppleScript dictionary contains a hidden, experimental command that is the only known mechanism for reordering todos within a list or project:
+
+```
+_private_experimental_ reorder to dos in <list|project> with ids "<UUID1>,<UUID2>,..."
+```
+
+- SDEF event code: `THGSreot`. `hidden="yes"`. `responds-to` declared on both `list` and `project` classes.
+- The command accepts a comma-separated string of todo UUIDs and pins them to the top of the container in the supplied order. Unlisted todos fall to the bottom in their existing relative order.
+- Empirically verified to write the new order persistently (survives Things restart) and to fire Things Cloud sync.
+- Discoverable via `sdef /Applications/Things3.app | grep -A 5 reorder`.
+
+### Why we keep this internal
+
+- Cultured Code has not documented this command and has not stated an intent to expose reorder publicly. The `_private_experimental_` prefix and `hidden="yes"` flag make removal at any future Things release a realistic possibility.
+- Multiple competing public Things-MCP repos do not implement reorder; the convention in that ecosystem is "reorder is not possible." Keeping the mechanism internal preserves a meaningful capability differentiator.
+- The MCP gates the command behind `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER=1` (in addition to the base `THINGS_MCP_ALLOW_APPLESCRIPT=1`) and runs a startup SDEF grep for `THGSreot` so that disappearance in a future Things release surfaces immediately as a `reorder_command_available: false` field in `health()`, not as a silent failure.
+
+### What may be said publicly
+
+- README: "The MCP can reorder todos within Things lists and projects when AppleScript is enabled." That is the entire public statement on the mechanism.
+- Tool docstrings: same — describe the *capability*, not the *implementation*.
+- Log messages and error strings: name only the high-level tool (`propose_reorder_todos`), not the AppleScript command. Avoid `_private_experimental_` and `THGSreot` anywhere a user could see them.
+
+### Where the command is referenced in code
+
+To be populated by the implementation session(s). Expected sites: `services/applescript.py` (the call site), `services/handlers/reorder_todos.py`, `tools/meta.py` (health-check grep). Internal code comments may name the command freely; user-facing strings must not.
+
+### Migration plan if/when Cultured Code adds an official reorder API
+
+1. Verify the new API behaviour matches our existing semantics (or document differences).
+2. Swap the call site in `services/applescript.py` to the public command.
+3. Retire the `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER` flag and the SDEF grep.
+4. README can then describe the capability without caveat; this section can be retired.
