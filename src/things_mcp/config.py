@@ -41,9 +41,8 @@ ALLOW_EXPERIMENTAL_REORDER = os.environ.get(
 # chunks (chunk C delete, chunk E bulk_*) are pre-listed so the gate is in
 # place when those handlers ship.
 NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
-    "delete_todo",
+    "delete_todo",   # AppleScript hard-delete → Things Trash
     "delete_heading",
-    "hard_delete_todo",
     "bulk_delete",
     "bulk_complete",
     "bulk_move",

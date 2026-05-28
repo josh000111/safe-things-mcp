@@ -31,7 +31,6 @@ from ..models import (
     ProposeBulkMoveInput,
     ProposeBulkUpdateInput,
     ProposeDeleteHeadingInput,
-    ProposeDeleteTodoInput,
     ProposeHardDeleteTodoInput,
     ProposeMoveTodoInput,
     ProposeUpdateHeadingInput,
@@ -150,32 +149,11 @@ async def propose_move_todo(todo_id: str, target: str) -> dict:
 
 
 async def propose_delete_todo(todo_id: str) -> dict:
-    """Propose soft-deleting a to-do.
+    """Propose deleting a to-do by moving it to Things Trash.
 
-    The task is marked canceled+completed via the URL scheme, which
-    moves it to the Logbook. The task is **not** purged — use ``undo()``
-    to restore it. Hard-delete (move to Trash) requires AppleScript and
-    arrives in step 5.
-
-    **Never auto-confirmed.** Even with ``THINGS_MCP_AUTO_CONFIRM=1`` the
-    user must call ``confirm_action`` explicitly.
-
-    Requires ``THINGS_AUTH_TOKEN``.
-    """
-    payload_model = ProposeDeleteTodoInput(todo_id=todo_id)
-    payload = payload_model.model_dump()
-    preview = handlers.delete_todo.make_preview(payload)
-    return await _enqueue_and_maybe_auto_confirm(
-        kind=handlers.delete_todo.KIND, payload=payload, preview=preview
-    )
-
-
-async def propose_hard_delete_todo(todo_id: str) -> dict:
-    """Propose hard-deleting a to-do by moving it to Things Trash.
-
-    Unlike soft-delete (``propose_delete_todo``), this uses AppleScript to
-    move the task to Things Trash. Undo uses AppleScript to restore it.
-    Things auto-empties Trash after 30 days.
+    Uses AppleScript to move the task to Things Trash — the same as
+    deleting it manually in the Things UI. Undo uses AppleScript to
+    restore it from Trash. Things auto-empties Trash after 30 days.
 
     Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 
@@ -184,7 +162,7 @@ async def propose_hard_delete_todo(todo_id: str) -> dict:
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_hard_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "propose_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
     payload_model = ProposeHardDeleteTodoInput(todo_id=todo_id)
@@ -492,7 +470,6 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_update_todo)
     mcp.tool()(propose_move_todo)
     mcp.tool()(propose_delete_todo)
-    mcp.tool()(propose_hard_delete_todo)
     mcp.tool()(propose_add_project)
     mcp.tool()(propose_update_project)
     mcp.tool()(propose_bulk_complete)

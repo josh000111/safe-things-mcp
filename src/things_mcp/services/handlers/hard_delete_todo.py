@@ -1,10 +1,9 @@
-"""``hard_delete_todo`` handler -- move a to-do to Things Trash via AppleScript.
+"""``delete_todo`` handler -- move a to-do to Things Trash via AppleScript.
 
-Unlike the soft-delete (``delete_todo``, which marks canceled+completed),
-this uses AppleScript ``delete`` which moves the task to Things Trash.
-Things auto-empties Trash after 30 days.
+Uses AppleScript ``delete`` which moves the task to Things Trash (same as
+manually deleting in the Things UI). Things auto-empties Trash after 30 days.
 
-**Undo** uses AppleScript ``move todo id X to list "..."`` (or project) to
+**Undo** uses AppleScript ``move to do id X to list "..."`` (or project) to
 restore the task from Trash back to its original container.
 
 This kind is in ``NEVER_BYPASS_KINDS`` -- explicit confirm required regardless
@@ -18,7 +17,7 @@ from .. import things_repo
 from .. import applescript
 from ...state import undo_log
 
-KIND = "hard_delete_todo"
+KIND = "delete_todo"
 
 
 def make_preview(payload: dict) -> str:
@@ -38,13 +37,13 @@ async def execute(payload: dict) -> dict:
     2. Confirm to-do exists and is not already in Trash.
     3. Snapshot the full row (needed for undo target).
     4. Write undo_log row BEFORE the AppleScript call (V2 acceptance gate).
-    5. Run: tell application "Things3" to delete (todo id "X")
+    5. Run: tell application "Things3" to delete (to do id "X").
     6. Return result with undo_id.
     """
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "hard_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
             "Set the environment variable and restart the MCP server."
         )
 
@@ -77,7 +76,7 @@ async def execute(payload: dict) -> dict:
     )
 
     safe_id = applescript.escape(todo_id)
-    script = f'tell application "Things3" to delete (todo id "{safe_id}")'
+    script = f'tell application "Things3" to delete (to do id "{safe_id}")'
     await applescript.run_script(script)
 
     undo_log.attach_target(entry_id, target_uuid=todo_id, after_state={"status": "trashed"})
@@ -95,16 +94,16 @@ async def execute(payload: dict) -> dict:
 
 
 async def undo(undo_entry: dict) -> dict:
-    """Restore a hard-deleted to-do from Things Trash.
+    """Restore a deleted to-do from Things Trash.
 
-    Uses AppleScript ``move todo id X to list "..."`` (or project).
+    Uses AppleScript ``move to do id X to list "..."`` (or project).
     If the original container was a project, moves back to that project.
     Otherwise moves to Inbox as the safe fallback.
     """
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Cannot undo hard_delete_todo without THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Cannot undo delete_todo without THINGS_MCP_ALLOW_APPLESCRIPT=1."
             "Set the environment variable and restart the MCP server."
         )
 
@@ -124,8 +123,10 @@ async def undo(undo_entry: dict) -> dict:
     if original_project:
         safe_project = applescript.escape(original_project)
         script = (
-            f'tell application "Things3" to move (todo id "{safe_id}") '
-            f'to project id "{safe_project}"'
+            f'tell application "Things3"\n'
+            f'    move (to do id "{safe_id}") to project id "{safe_project}"\n'
+            f'    return ""\n'
+            f'end tell'
         )
     else:
         # Restore to the original built-in list, defaulting to Inbox.
@@ -133,8 +134,10 @@ async def undo(undo_entry: dict) -> dict:
         restore_list = _normalise_list_name(original_list)
         safe_list = applescript.escape(restore_list)
         script = (
-            f'tell application "Things3" to move (todo id "{safe_id}") '
-            f'to list "{safe_list}"'
+            f'tell application "Things3"\n'
+            f'    move (to do id "{safe_id}") to list "{safe_list}"\n'
+            f'    return ""\n'
+            f'end tell'
         )
 
     await applescript.run_script(script)

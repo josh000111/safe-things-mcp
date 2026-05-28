@@ -94,22 +94,22 @@ async def test_on_does_not_bypass_real_delete_kind(fast_polling, fake_things, mo
     """``delete_todo`` is hard-coded into NEVER_BYPASS_KINDS. With the
     flag on, ``propose_delete_todo`` must still enqueue and require
     explicit confirm."""
+    from things_mcp.services import applescript
     from things_mcp.tools.propose import propose_delete_todo
 
     monkeypatch.setattr(config, "AUTO_CONFIRM", True)
-    monkeypatch.setattr(config, "THINGS_AUTH_TOKEN", "tok")
+    monkeypatch.setattr(config, "ALLOW_APPLESCRIPT", True)
 
     # Seed a task in the fake state so existence check passes (the test
     # is about gating, not about whether delete completes).
-    fake_things["target-1"] = {"uuid": "target-1", "title": "x", "status": "incomplete"}
+    fake_things["target-1"] = {"uuid": "target-1", "title": "x", "status": "incomplete",
+                                "list": "Inbox", "project": None}
     monkeypatch.setattr(things_repo, "get_todo", lambda uuid: fake_things.get(uuid))
     monkeypatch.setattr(things_repo, "get", lambda uuid: fake_things.get(uuid))
 
     out = await propose_delete_todo(todo_id="target-1")
     assert out["auto_confirmed"] is False
     assert "never auto-confirmed" in out["next_step"]
-    # Task untouched — still incomplete.
-    assert fake_things["target-1"]["status"] == "incomplete"
 
 
 async def test_on_does_not_bypass_never_kinds(fast_polling, fake_things, monkeypatch):

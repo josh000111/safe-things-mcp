@@ -15,19 +15,20 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 3 — `propose_add_todo` + round-trip undo test | ✅ Done | ✅ Verified (Round 1) |
 | V2 step 4 chunk A — direct shortcuts (`add_today/anytime/someday_todo`, `complete_todo`) + `upcoming` rejection | ✅ Done | ✅ Verified (Round 2) |
 | V2 step 4 chunk B — `THINGS_MCP_AUTO_CONFIRM` flag + `propose_update_todo` | ✅ Done | ✅ Verified (Round 2) |
-| V2 step 4 chunk C — `propose_move_todo`, `propose_delete_todo` (soft) | ✅ Done | ✅ Verified (Round 3 — items 56/57 target-validation fix landed post-run) |
+| V2 step 4 chunk C — `propose_move_todo`, ~~`propose_delete_todo` (soft — removed, see Step 5A)~~ | ✅ Done | ✅ Verified (Round 3 — items 56/57 target-validation fix landed post-run) |
 | V2 step 4 chunk D — `propose_add_project` (with headings via `things:///json`), `propose_update_project` | ✅ Done | ✅ Verified (Round 4 — 27/30 pass, 3 deferred; 0 blocking bugs; see `tests/V2-Round4-chunks-D-E-verification-2026-05-19.md`) |
 | V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done | ✅ Verified (Round 4 — same session; 0 blocking bugs) |
 | V2 step 4b — dummy-heading interim layer (URL-scheme only) | ✅ Done | ✅ Verified (Round 5 — 227 tests pass; items 98–122 all pass; see tests/V2-step-4b-verification-2026-05-25.md) |
-| V2 step 5A — opt-in AppleScript foundation (`THINGS_MCP_ALLOW_APPLESCRIPT` + `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER`) + hard-delete | ✅ Done (290 tests pass; `applescript.py`, `hard_delete_todo` handler, `propose_hard_delete_todo`, `health()` extended) | ⏳ Manual Testing Session: Not yet run (items 131–135 in manual-verification.md; see tests/handoff-step-5a.md) |
+| V2 step 5A — opt-in AppleScript foundation + `propose_delete_todo` (hard-delete → Trash); soft-delete removed | ✅ Done (280 tests pass; `applescript.py`, `hard_delete_todo` handler renamed to `propose_delete_todo`, `health()` extended) | ⏳ Manual Testing Session: items 131–135 verified except live round-trip (`test_132_133_hard_delete_and_undo`) — needs re-run as Test user with multi-line undo fix |
 | V2 step 5B — reorder todos in lists/projects (with native-heading auto-conversion to dummies at original positions) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 5C — checklist tools (`get_checklist_items`, append/prepend/replace via URL scheme) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 5D — `propose_cancel_todo` (URL-scheme cancel → Logbook; no AppleScript) | ⏳ Not built | n/a — unit tests only |
 | ~~V2 step 6~~ — native heading support via AppleScript | ❌ **Cancelled** — SDEF inspection confirmed Things 3 AppleScript has no `heading` class. Native-heading CRUD is impossible by any mechanism. Dummy headings (Step 4b) are the permanent solution. See §5.3 and §10. | n/a |
 | **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | Round-4 deferred items #73, #82, #97 — error-path manual verification | n/a — no build needed | ⏳ Run during Round-5 preflight (config-change + restart sequence) |
 
-Automated suite: 227 tests, ~1.5s, hermetic (no real Things DB / URL launches).
+Automated suite: 280 tests, ~1.9s, hermetic (no real Things DB / URL launches).
 
 ### Round-4 deferred items — how to close them
 Items #73, #82, #97 require a config-change + session restart (token removal or `AUTO_CONFIRM` flag toggle). All three test error paths already covered by unit tests. Run at the top of the Round-5 Test-user session before the main 4b checklist:
@@ -226,8 +227,8 @@ Mutating tools split into two tiers based on risk. **Low-risk direct shortcuts**
 | `propose_reorder_todos(container, new_order)` (step 5B) | `confirm_action` | Single tool with smart container routing: built-in list name (`"Today"`) → `list "Today"`; otherwise project UUID → `project id "X"`. Uses the hidden AppleScript reorder command (see §12). Native-heading projects auto-convert natives to dummies at their original positions; empty natives left at bottom for manual user cleanup. |
 | `complete_todo(todo_id)` (direct, single-target) | n/a — no airlock | Reversible (`update?completed=false`). Most common everyday op. |
 | `propose_bulk_complete([todo_id, ...])` | `confirm_action` | Bulk = preview valuable; never bypassable. |
-| `propose_delete_todo(todo_id)` | `confirm_action` — **never bypassable** | Soft-delete only — URL `update?canceled=true&completed=true`. Reversible. |
-| `propose_hard_delete_todo(todo_id)` (step 5A) | `confirm_action` — **never bypassable** | AppleScript `delete <todo>` → moves to Things Trash (recoverable from Trash for 30d via `move <todo> to list "Inbox"`). Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`. |
+| `propose_delete_todo(todo_id)` (step 5A) | `confirm_action` — **never bypassable** | AppleScript `delete (to do id "X")` → moves to Things Trash (recoverable from Trash for 30 days). Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`. Replaces the old URL-scheme soft-delete (removed). |
+| `propose_cancel_todo(todo_id)` (step 5D) | `confirm_action` | URL scheme `update?canceled=true` → moves to Logbook without deleting. Reversible. No AppleScript required. |
 | `propose_bulk_*(...)` | `confirm_action` — **never bypassable** | Multi-target = high blast radius. |
 | `propose_add_project(...)` | `confirm_action` | Project creation supports headings via `things:///json` payload. |
 | `propose_update_project(...)` | `confirm_action` | Edits live project. |
@@ -248,7 +249,7 @@ Mutating tools split into two tiers based on risk. **Low-risk direct shortcuts**
 
 **Auto-confirm escape hatch (`THINGS_MCP_AUTO_CONFIRM`):**
 
-When the env var `THINGS_MCP_AUTO_CONFIRM=1` is set, any tool returning a `propose_*` action_id is immediately confirmed inside the same MCP call — the preview is still surfaced to the agent (so the LLM can summarize before responding) but no second round-trip is required. **Exceptions:** `propose_delete_todo`, `propose_hard_delete_todo`, `propose_bulk_*`, and `propose_replace_checklist` always require an explicit `confirm_action` call regardless of this flag. The "never bypassable" column above marks these.
+When the env var `THINGS_MCP_AUTO_CONFIRM=1` is set, any tool returning a `propose_*` action_id is immediately confirmed inside the same MCP call — the preview is still surfaced to the agent (so the LLM can summarize before responding) but no second round-trip is required. **Exceptions:** `propose_delete_todo`, `propose_bulk_*`, and `propose_replace_checklist` always require an explicit `confirm_action` call regardless of this flag. The "never bypassable" column above marks these.
 
 **Why two-tier and not one or the other:**
 - Pure airlock is too high-friction for everyday adds.
@@ -356,7 +357,7 @@ Tool docstrings + README must explicitly state: *"To change a single item, repla
 3. `THINGS_MCP_AUTO_CONFIRM` env flag + never-bypass list for destructive kinds.
 4. `propose_update_todo` (first non-add handler — establishes the "before-state snapshot for undo" pattern).
 5. `propose_move_todo` (between lists / into projects via URL scheme `update?list=` / `list-id=`).
-6. `propose_delete_todo` — soft-delete (URL scheme `update?canceled=true&completed=true`). Undo restores via `update?canceled=false&completed=false`.
+6. ~~`propose_delete_todo` — soft-delete (URL scheme `update?canceled=true&completed=true`)~~ — **removed in Step 5A**. Replaced by AppleScript hard-delete (→ Trash). Cancel-without-delete arrives in Step 5D.
 7. `propose_add_project`, `propose_update_project` — URL scheme `add-project` / `update-project` (requires `THINGS_AUTH_TOKEN` for update). `add_project` supports a `headings: [...]` array routed through `things:///json` for native heading creation at project birth.
 8. `propose_bulk_*` (delete / complete / move / update) — batch wrappers. Always require explicit confirm regardless of `THINGS_MCP_AUTO_CONFIRM`.
 
@@ -369,12 +370,20 @@ Tool docstrings + README must explicitly state: *"To change a single item, repla
 
 **Step 5 — opt-in AppleScript layer + checklist tools. Split into three sub-chunks for incremental Test-user verification rounds.** Detailed implementation plan in `/Users/joshsmith/.claude/plans/review-docs-things-mcp-v2-technical-arch-declarative-hennessy.md`.
 
-**Step 5A — AppleScript foundation + hard-delete:**
+**Step 5A — AppleScript foundation + `propose_delete_todo` (hard-delete → Trash):** ✅ Done
 1. `services/applescript.py` — thin async `osascript` wrapper with hardened escaping (`"` → `\"`, `\` → `\\`, reject control chars). `verify_authorization()` runs a no-op script, caches result.
 2. Two env flags in `config.py`: `THINGS_MCP_ALLOW_APPLESCRIPT` (gates all AppleScript) and `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER` (gates the hidden reorder command — see §12). Both default off.
-3. `services/handlers/hard_delete_todo.py` — propose snapshots current state, execute runs AppleScript `delete <todo>` (moves to Things Trash), undo runs `move <todo> to list "<original_list>"`. Always on `NEVER_BYPASS_KINDS`.
-4. `propose_hard_delete_todo(todo_id)` in `tools/write.py`.
+3. `services/handlers/hard_delete_todo.py` (KIND `"delete_todo"`) — propose snapshots current state, execute runs AppleScript `delete (to do id "X")` (moves to Things Trash), undo runs multi-line AppleScript `move (to do id "X") to list/project`. Always on `NEVER_BYPASS_KINDS`.
+4. `propose_delete_todo(todo_id)` in `tools/propose.py` — replaces the old URL-scheme soft-delete (Step 4C) which is now removed. This is the canonical delete tool.
 5. `health()` extended with `applescript_enabled`, `experimental_reorder_enabled`, `applescript_authorized`, `reorder_command_available` (SDEF grep for `THGSreot`, cached).
+6. **Soft-delete removed:** `propose_delete_todo` formerly marked tasks `canceled+completed` (→ Logbook). That tool and its handler are now tombstoned. To cancel (not delete) a task, see Step 5D.
+
+**Step 5D — `propose_cancel_todo` (URL-scheme cancel → Logbook):**
+Cancel a task natively (Things "Cancel" action) without deleting it.
+1. `services/url_scheme.py` — add `build_cancel_url(id, auth_token)` that sets `canceled=True` only (not `completed=True`).
+2. `services/handlers/cancel_todo.py` — execute sets `canceled=True`; undo restores `canceled=False`. Snapshot before-state so undo is clean. NOT in `NEVER_BYPASS_KINDS` (cancelling is reversible and low-risk).
+3. `propose_cancel_todo(todo_id)` in `tools/propose.py`.
+4. Unit tests sufficient — URL-scheme cancel is hermetic (no AppleScript, no manual verification needed). Add to automated suite.
 
 **Step 5B — reorder todos (with native-heading auto-conversion):**
 1. `services/reorder.py` — `build_master_order()` for the Unified Master List Overwrite strategy (partial reorders preserve surrounding positions); `detect_native_headings()`; `resolve_container()` for smart list-vs-project routing.

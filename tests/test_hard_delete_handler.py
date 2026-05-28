@@ -1,4 +1,4 @@
-"""Unit tests for the ``hard_delete_todo`` handler.
+"""Unit tests for the ``delete_todo`` handler (hard-delete via AppleScript).
 
 * propose/execute/undo round-trip via mocked AppleScript
 * undo_log is written BEFORE the AppleScript call (V2 acceptance gate)
@@ -61,11 +61,11 @@ def _todo(uuid: str = "todo-abc", title: str = "Test todo", list_name: str = "In
 
 
 def test_kind_constant():
-    assert hard_delete_todo.KIND == "hard_delete_todo"
+    assert hard_delete_todo.KIND == "delete_todo"
 
 
 def test_kind_in_never_bypass_kinds():
-    assert "hard_delete_todo" in config.NEVER_BYPASS_KINDS
+    assert "delete_todo" in config.NEVER_BYPASS_KINDS
 
 
 # ---------- execute — flag gate ----------
@@ -111,7 +111,7 @@ async def test_undo_log_written_before_applescript(applescript_enabled, monkeypa
     await hard_delete_todo.execute({"todo_id": "todo-abc"})
 
     assert len(pre_script_rows) == 1
-    assert pre_script_rows[0]["action_kind"] == "hard_delete_todo"
+    assert pre_script_rows[0]["action_kind"] == "delete_todo"
     assert pre_script_rows[0]["target_uuid"] == "todo-abc"
 
 
@@ -139,7 +139,7 @@ async def test_execute_returns_undo_id_and_note(
 
     result = await hard_delete_todo.execute({"todo_id": "todo-abc"})
 
-    assert result["action_kind"] == "hard_delete_todo"
+    assert result["action_kind"] == "delete_todo"
     assert result["id"] == "todo-abc"
     assert result["title"] == "My Task"
     assert "undo_id" in result
@@ -167,7 +167,7 @@ async def test_undo_raises_when_applescript_disabled(monkeypatch):
     with pytest.raises(RuntimeError, match="THINGS_MCP_ALLOW_APPLESCRIPT"):
         await hard_delete_todo.undo({
             "id": "entry-1",
-            "action_kind": "hard_delete_todo",
+            "action_kind": "delete_todo",
             "target_uuid": "todo-abc",
             "before_state": {"original_list": "Inbox", "original_project": None},
         })
@@ -180,7 +180,7 @@ async def test_undo_restores_to_original_list(
     applescript_enabled, captured_scripts, monkeypatch
 ):
     entry_id = undo_log.record(
-        action_kind="hard_delete_todo",
+        action_kind="delete_todo",
         target_uuid="todo-abc",
         before_state={
             "full": _todo(),
@@ -211,7 +211,7 @@ async def test_undo_restores_to_original_project(
 ):
     project_id = "proj-uuid-1234"
     entry_id = undo_log.record(
-        action_kind="hard_delete_todo",
+        action_kind="delete_todo",
         target_uuid="todo-abc",
         before_state={
             "full": _todo(project=project_id),
@@ -238,7 +238,7 @@ async def test_undo_falls_back_to_inbox_for_unknown_list(
     applescript_enabled, captured_scripts, monkeypatch
 ):
     entry_id = undo_log.record(
-        action_kind="hard_delete_todo",
+        action_kind="delete_todo",
         target_uuid="todo-abc",
         before_state={
             "full": _todo(),

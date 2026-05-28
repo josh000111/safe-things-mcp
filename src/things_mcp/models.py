@@ -123,22 +123,11 @@ class ProposeMoveTodoInput(BaseModel):
     target: str = Field(..., min_length=1)
 
 
-class ProposeDeleteTodoInput(BaseModel):
-    """V2 — propose soft-deleting a to-do (mark canceled + completed →
-    moves to Logbook). Hard-delete (AppleScript) arrives in step 5.
-
-    This kind is in ``NEVER_BYPASS_KINDS`` — even with
-    ``THINGS_MCP_AUTO_CONFIRM=1`` the user must explicitly call
-    ``confirm_action``.
-    """
-    todo_id: str = Field(..., min_length=1)
-
-
 class ProposeHardDeleteTodoInput(BaseModel):
-    """V2 step 5A — propose hard-deleting a to-do via AppleScript.
+    """V2 step 5A — propose deleting a to-do via AppleScript.
 
-    Moves the task to Things Trash (unlike soft-delete which goes to Logbook).
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Moves the task to Things Trash (the same as deleting manually in the
+    Things UI). Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 
     This kind is in ``NEVER_BYPASS_KINDS`` — even with
     ``THINGS_MCP_AUTO_CONFIRM=1`` the user must explicitly call
