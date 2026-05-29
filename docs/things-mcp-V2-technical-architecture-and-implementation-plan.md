@@ -22,8 +22,8 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 5A — opt-in AppleScript foundation + `propose_delete_todo` (hard-delete → Trash); soft-delete removed | ✅ Done (280 tests pass; `applescript.py`, `hard_delete_todo` handler renamed to `propose_delete_todo`, `health()` extended) | ✅ Verified (Round 7 — 2026-05-29; all items 131–135 pass incl. live delete+undo round-trip) |
 | V2 step 5B — reorder todos in lists/projects (with native-heading auto-conversion to dummies at original positions) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 5C — checklist tools (`get_checklist_items`, append/prepend/replace via URL scheme) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
-| V2 step 5D — `propose_cancel_todo` (URL-scheme cancel → Logbook) + `propose_bulk_delete` cleanup | ⏳ Not built | n/a — unit tests only |
-| V2 step 5E — `propose_cancel_project` (URL-scheme) + `propose_delete_project` (AppleScript → Trash) | ⏳ Not built | n/a for cancel (unit tests only); AppleScript delete path needs 1 smoke-test item in Test account |
+| V2 step 5D — `propose_cancel_todo` + `propose_bulk_cancel` (renamed from bulk_delete) | ✅ Done (284→325 tests, +41) | n/a — unit tests only |
+| V2 step 5E — `propose_cancel_project` (URL-scheme) + `propose_delete_project` (AppleScript → Trash) | ✅ Done (284→325 tests, +41) | ⏳ Manual Testing Pending: `propose_delete_project` smoke-test needs Test user session |
 | ~~V2 step 6~~ — native heading support via AppleScript | ❌ **Cancelled** — SDEF inspection confirmed Things 3 AppleScript has no `heading` class. Native-heading CRUD is impossible by any mechanism. Dummy headings (Step 4b) are the permanent solution. See §5.3 and §10. | n/a |
 | **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |

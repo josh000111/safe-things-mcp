@@ -148,24 +148,24 @@ async def test_bulk_complete_undo_round_trip(
 
 
 # =============================================================================
-# bulk_delete
+# bulk_cancel (was bulk_delete)
 # =============================================================================
 
 
-async def test_bulk_delete_requires_auth(monkeypatch):
+async def test_bulk_cancel_requires_auth(monkeypatch):
     monkeypatch.setattr(config, "THINGS_AUTH_TOKEN", None)
     with pytest.raises(RuntimeError, match="THINGS_AUTH_TOKEN"):
         await bulk_delete.execute({"todo_ids": ["a"]})
 
 
-async def test_bulk_delete_aborts_when_any_already_done(with_auth, monkeypatch):
+async def test_bulk_cancel_aborts_when_any_already_done(with_auth, monkeypatch):
     rows = {"a": _row("a"), "b": _row("b", status="canceled")}
     monkeypatch.setattr(things_repo, "get_todo", lambda uid: rows.get(uid))
     with pytest.raises(ValueError, match="already status"):
         await bulk_delete.execute({"todo_ids": ["a", "b"]})
 
 
-async def test_bulk_delete_launches_canceled_completed_per_item(
+async def test_bulk_cancel_launches_canceled_completed_per_item(
     with_auth, monkeypatch, captured_launches
 ):
     rows = {"a": _row("a"), "b": _row("b")}
@@ -179,11 +179,11 @@ async def test_bulk_delete_launches_canceled_completed_per_item(
         assert "completed=true" in url
 
 
-async def test_bulk_delete_undo_restores_all(
+async def test_bulk_cancel_undo_restores_all(
     with_auth, monkeypatch, captured_launches
 ):
     entry_id = undo_log.record(
-        action_kind="bulk_delete",
+        action_kind="bulk_cancel",
         target_uuid=None,
         before_state={
             "items": [
@@ -354,6 +354,6 @@ async def test_bulk_update_undo_restores_per_item_values(
 
 def test_previews_render_counts():
     assert "Bulk complete 3 to-dos" in bulk_complete.make_preview({"todo_ids": ["a", "b", "c"]})
-    assert "Bulk soft-delete 1 to-do " in bulk_delete.make_preview({"todo_ids": ["a"]})
+    assert "Bulk cancel 1 to-do " in bulk_delete.make_preview({"todo_ids": ["a"]})
     assert "Bulk move 2 to-dos to 'today'" in bulk_move.make_preview({"todo_ids": ["a", "b"], "target": "today"})
     assert "Bulk update 2 to-dos: title='New'" in bulk_update.make_preview({"todo_ids": ["a", "b"], "title": "New"})

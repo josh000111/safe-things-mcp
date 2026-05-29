@@ -26,11 +26,15 @@ from ..models import (
     ProposeAddHeadingInput,
     ProposeAddProjectInput,
     ProposeAddTodoInput,
+    ProposeBulkCancelInput,
     ProposeBulkCompleteInput,
     ProposeBulkDeleteInput,
     ProposeBulkMoveInput,
     ProposeBulkUpdateInput,
+    ProposeCancelProjectInput,
+    ProposeCancelTodoInput,
     ProposeDeleteHeadingInput,
+    ProposeDeleteProjectInput,
     ProposeHardDeleteTodoInput,
     ProposeMoveTodoInput,
     ProposeUpdateHeadingInput,
@@ -258,13 +262,13 @@ async def propose_bulk_complete(todo_ids: list[str]) -> dict:
     )
 
 
-async def propose_bulk_delete(todo_ids: list[str]) -> dict:
-    """Propose soft-deleting N to-dos in one airlocked op.
+async def propose_bulk_cancel(todo_ids: list[str]) -> dict:
+    """Propose canceling N to-dos in one airlocked op.
 
-    Each task gets marked canceled+completed (moves to Logbook). Use
-    ``undo()`` to restore the whole batch. **Never auto-confirmed.**
+    Each task gets marked canceled. Use ``undo()`` to restore the whole
+    batch. **Never auto-confirmed.**
     """
-    payload_model = ProposeBulkDeleteInput(todo_ids=todo_ids)
+    payload_model = ProposeBulkCancelInput(todo_ids=todo_ids)
     payload = payload_model.model_dump()
     preview = handlers.bulk_delete.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -325,6 +329,57 @@ async def propose_bulk_update(
     preview = handlers.bulk_update.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_update.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_cancel_todo(todo_id: str) -> dict:
+    """Propose canceling a to-do.
+
+    Marks the to-do canceled via the URL scheme. Undo restores it to
+    incomplete. Requires ``THINGS_AUTH_TOKEN``. Auto-confirmable.
+    """
+    payload_model = ProposeCancelTodoInput(todo_id=todo_id)
+    payload = payload_model.model_dump()
+    preview = handlers.cancel_todo.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.cancel_todo.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_cancel_project(project_id: str) -> dict:
+    """Propose canceling a project.
+
+    Marks the project canceled via the URL scheme. Undo restores it to
+    incomplete. Requires ``THINGS_AUTH_TOKEN``. Auto-confirmable.
+    """
+    payload_model = ProposeCancelProjectInput(project_id=project_id)
+    payload = payload_model.model_dump()
+    preview = handlers.cancel_project.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.cancel_project.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_delete_project(project_id: str) -> dict:
+    """Propose deleting a project by moving it to Things Trash.
+
+    Uses AppleScript to move the project (and all its tasks) to Things Trash.
+    Undo restores the project to Anytime (area membership not restored).
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+
+    **Never auto-confirmed.**
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_delete_project requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Set the environment variable and restart the MCP server."
+        )
+    payload_model = ProposeDeleteProjectInput(project_id=project_id)
+    payload = payload_model.model_dump()
+    preview = handlers.delete_project.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.delete_project.KIND, payload=payload, preview=preview
     )
 
 
@@ -467,13 +522,16 @@ async def _enqueue_and_maybe_auto_confirm(
 
 def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_add_todo)
+    mcp.tool()(propose_cancel_todo)
     mcp.tool()(propose_update_todo)
     mcp.tool()(propose_move_todo)
     mcp.tool()(propose_delete_todo)
     mcp.tool()(propose_add_project)
+    mcp.tool()(propose_cancel_project)
+    mcp.tool()(propose_delete_project)
     mcp.tool()(propose_update_project)
     mcp.tool()(propose_bulk_complete)
-    mcp.tool()(propose_bulk_delete)
+    mcp.tool()(propose_bulk_cancel)
     mcp.tool()(propose_bulk_move)
     mcp.tool()(propose_bulk_update)
     mcp.tool()(propose_add_heading)

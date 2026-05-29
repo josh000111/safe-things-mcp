@@ -1,7 +1,7 @@
-"""``bulk_delete`` handler — soft-delete multiple to-dos.
+"""``bulk_cancel`` handler — cancel multiple to-dos.
 
-Bulk version of :mod:`delete_todo`. Same per-item soft-delete shape
-(URL scheme ``update?canceled=true&completed=true``), but written as a
+Bulk version of :mod:`cancel_todo`. Marks each to-do canceled via the
+URL scheme (``update?canceled=true&completed=true``), written as a
 single airlocked operation with one ``undo_log`` row covering N targets.
 
 Requires ``THINGS_AUTH_TOKEN``. Always in :data:`config.NEVER_BYPASS_KINDS`.
@@ -12,26 +12,26 @@ from ... import config
 from .. import things_repo, url_scheme
 from ...state import undo_log
 
-KIND = "bulk_delete"
+KIND = "bulk_cancel"
 
 
 def make_preview(payload: dict) -> str:
     n = len(payload.get("todo_ids") or [])
     return (
-        f"Bulk soft-delete {n} to-do{'s' if n != 1 else ''} "
-        "(mark canceled+completed → moves to Logbook; restorable via undo)"
+        f"Bulk cancel {n} to-do{'s' if n != 1 else ''} "
+        "(mark canceled; restorable via undo)"
     )
 
 
 async def execute(payload: dict) -> dict:
     todo_ids = list(payload.get("todo_ids") or [])
     if not todo_ids:
-        raise ValueError("bulk_delete requires a non-empty todo_ids list.")
+        raise ValueError("bulk_cancel requires a non-empty todo_ids list.")
 
     auth_token = config.THINGS_AUTH_TOKEN
     if not auth_token:
         raise RuntimeError(
-            "bulk_delete requires THINGS_AUTH_TOKEN. Generate one in "
+            "bulk_cancel requires THINGS_AUTH_TOKEN. Generate one in "
             "Things → Settings → General → Enable Things URLs → Manage, "
             "then export THINGS_AUTH_TOKEN before retrying."
         )
@@ -41,13 +41,13 @@ async def execute(payload: dict) -> dict:
         row = things_repo.get_todo(uid)
         if row is None:
             raise ValueError(
-                f"No to-do found with id={uid!r}. Bulk delete aborts before "
+                f"No to-do found with id={uid!r}. Bulk cancel aborts before "
                 "any mutation — fix the id list and retry."
             )
         if row.get("status") in {"canceled", "completed"}:
             raise ValueError(
                 f"to-do {uid!r} is already status={row.get('status')!r}. "
-                "Bulk delete aborts before any mutation. Drop it from the "
+                "Bulk cancel aborts before any mutation. Drop it from the "
                 "list and retry."
             )
         items.append({
@@ -78,24 +78,24 @@ async def execute(payload: dict) -> dict:
         "count": len(items),
         "ids": [it["target_uuid"] for it in items],
         "note": (
-            "Soft-deleted: tasks moved to Logbook (canceled). Use undo() to "
-            "restore. Hard-delete via AppleScript arrives in step 5."
+            "Canceled: tasks marked canceled. Use undo() to restore."
         ),
     }
 
 
 async def undo(undo_entry: dict) -> dict:
+    """Reverse a bulk cancel: restore each to-do to incomplete."""
     before = undo_entry.get("before_state")
     if not isinstance(before, dict) or not before.get("items"):
         raise RuntimeError(
             f"undo_log entry {undo_entry.get('id')!r} has no items to "
-            "restore; original bulk_delete may have failed before logging."
+            "restore; original bulk_cancel may have failed before logging."
         )
 
     auth_token = config.THINGS_AUTH_TOKEN
     if not auth_token:
         raise RuntimeError(
-            "Cannot undo bulk_delete without THINGS_AUTH_TOKEN. Set it and "
+            "Cannot undo bulk_cancel without THINGS_AUTH_TOKEN. Set it and "
             "retry."
         )
 

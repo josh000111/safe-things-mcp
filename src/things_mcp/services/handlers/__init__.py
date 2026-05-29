@@ -30,8 +30,11 @@ from . import (
     bulk_delete,
     bulk_move,
     bulk_update,
+    cancel_project,
+    cancel_todo,
     complete_todo,
     delete_heading,
+    delete_project,
     hard_delete_todo,
     move_todo,
     update_heading,
@@ -52,11 +55,14 @@ class Handler(Protocol):
 
 REGISTRY: dict[str, Handler] = {
     add_todo.KIND: add_todo,  # type: ignore[dict-item]
+    cancel_todo.KIND: cancel_todo,  # type: ignore[dict-item]
     complete_todo.KIND: complete_todo,  # type: ignore[dict-item]
     update_todo.KIND: update_todo,  # type: ignore[dict-item]
     move_todo.KIND: move_todo,  # type: ignore[dict-item]
     hard_delete_todo.KIND: hard_delete_todo,  # type: ignore[dict-item]
     add_project.KIND: add_project,  # type: ignore[dict-item]
+    cancel_project.KIND: cancel_project,  # type: ignore[dict-item]
+    delete_project.KIND: delete_project,  # type: ignore[dict-item]
     update_project.KIND: update_project,  # type: ignore[dict-item]
     bulk_complete.KIND: bulk_complete,  # type: ignore[dict-item]
     bulk_delete.KIND: bulk_delete,  # type: ignore[dict-item]

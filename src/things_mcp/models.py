@@ -276,6 +276,26 @@ class ProposeDeleteHeadingInput(BaseModel):
     heading_id_or_name: str = Field(..., min_length=1, description="UUID of the dummy heading task, or its name")
 
 
+class ProposeCancelTodoInput(BaseModel):
+    """V2 — propose canceling a to-do."""
+    todo_id: str = Field(..., min_length=1)
+
+
+class ProposeBulkCancelInput(BaseModel):
+    """V2 — propose canceling N to-dos in one airlocked op."""
+    todo_ids: list[str] = Field(..., min_length=1)
+
+
+class ProposeCancelProjectInput(BaseModel):
+    """V2 — propose canceling a project."""
+    project_id: str = Field(..., min_length=1)
+
+
+class ProposeDeleteProjectInput(BaseModel):
+    """V2 step 5E — propose deleting a project via AppleScript."""
+    project_id: str = Field(..., min_length=1)
+
+
 class HealthReport(BaseModel):
     things_db_path: str
     things_db_exists: bool
