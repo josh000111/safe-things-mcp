@@ -26,6 +26,7 @@ from . import (
     add_heading,
     add_project,
     add_todo,
+    append_checklist,
     bulk_complete,
     bulk_delete,
     bulk_move,
@@ -37,6 +38,8 @@ from . import (
     delete_project,
     hard_delete_todo,
     move_todo,
+    prepend_checklist,
+    replace_checklist,
     update_heading,
     update_project,
     update_todo,
@@ -71,6 +74,9 @@ REGISTRY: dict[str, Handler] = {
     add_heading.KIND: add_heading,  # type: ignore[dict-item]
     update_heading.KIND: update_heading,  # type: ignore[dict-item]
     delete_heading.KIND: delete_heading,  # type: ignore[dict-item]
+    append_checklist.KIND: append_checklist,  # type: ignore[dict-item]
+    prepend_checklist.KIND: prepend_checklist,  # type: ignore[dict-item]
+    replace_checklist.KIND: replace_checklist,  # type: ignore[dict-item]
 }
 
 

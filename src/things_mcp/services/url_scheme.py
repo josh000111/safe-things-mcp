@@ -321,6 +321,51 @@ def build_update_project_url(
     return "things:///update-project?" + urlencode(params, quote_via=quote)
 
 
+def build_append_checklist_url(
+    *, todo_id: str, items: list[str], auth_token: str
+) -> str:
+    if not todo_id:
+        raise ValueError("todo_id is required")
+    if not auth_token:
+        raise ValueError("auth_token is required")
+    params: list[tuple[str, str]] = [
+        ("id", todo_id),
+        ("auth-token", auth_token),
+        ("append-checklist-items", "\n".join(items)),
+    ]
+    return "things:///update?" + urlencode(params, quote_via=quote)
+
+
+def build_prepend_checklist_url(
+    *, todo_id: str, items: list[str], auth_token: str
+) -> str:
+    if not todo_id:
+        raise ValueError("todo_id is required")
+    if not auth_token:
+        raise ValueError("auth_token is required")
+    params: list[tuple[str, str]] = [
+        ("id", todo_id),
+        ("auth-token", auth_token),
+        ("prepend-checklist-items", "\n".join(items)),
+    ]
+    return "things:///update?" + urlencode(params, quote_via=quote)
+
+
+def build_replace_checklist_url(
+    *, todo_id: str, items: list[str], auth_token: str
+) -> str:
+    if not todo_id:
+        raise ValueError("todo_id is required")
+    if not auth_token:
+        raise ValueError("auth_token is required")
+    params: list[tuple[str, str]] = [
+        ("id", todo_id),
+        ("auth-token", auth_token),
+        ("checklist-items", "\n".join(items)),
+    ]
+    return "things:///update?" + urlencode(params, quote_via=quote)
+
+
 async def launch(url: str) -> None:
     """Hand the URL to macOS via `open`. Non-blocking on the event loop."""
     await asyncio.to_thread(

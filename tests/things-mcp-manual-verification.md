@@ -275,3 +275,39 @@ These items from Round 4 require a config-change + restart. Run them before the 
 134. **Flags off** — With both `THINGS_MCP_ALLOW_APPLESCRIPT` and `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER` unset, call `health()`. Verify: `applescript_enabled: false`, `experimental_reorder_enabled: false`, `reorder_command_available: null` (or absent), `applescript_authorized: "unknown"` (or `false` — not yet verified).
 
 135. **Both flags on, after first AppleScript call** — With both flags set, restart, then call `propose_hard_delete_todo` (even if it fails) or any tool that triggers `verify_authorization()`. Call `health()`. Verify: `applescript_enabled: true`, `experimental_reorder_enabled: true`, `applescript_authorized: true` (assuming Automation permission is granted), `reorder_command_available: true`.
+
+---
+
+## Step 5C — Checklist tools
+
+**Pre-flight:** `THINGS_AUTH_TOKEN` must be set. Restart Claude Desktop to reload the MCP server. All tests run as the **Test** user (`whoami` first).
+
+### `get_checklist_items`
+
+136. **Read items from an existing checklist** — In the Things UI (Test account), create a to-do with a 3-item checklist (e.g. "Step A", "Step B", "Step C"). Call `get_checklist_items(todo_id=<uuid>)`. Verify: response is a list of 3 dicts, each with `title` and `status` fields; order matches the Things UI order.
+
+137. **To-do with no checklist returns empty list** — Pick (or create) a to-do with no checklist. Call `get_checklist_items(todo_id=<uuid>)`. Verify: response is `[]` (not an error, not `null`).
+
+### `propose_append_checklist_items`
+
+138. **Append to existing checklist** — Using the 3-item to-do from #136, call `propose_append_checklist_items(todo_id=<uuid>, items=["Step D", "Step E"])`. Preview mentions the to-do UUID and item count. Call `confirm_action`. In Things, the checklist now shows 5 items: A, B, C, D, E (in order). `recent_undo_log()` shows an `append_checklist` row.
+
+139. **Undo append** — After #138, call `undo()`. Checklist returns to 3 items (A, B, C). The undo row is removed from `recent_undo_log()`.
+
+140. **AUTO_CONFIRM works for append** — With `THINGS_MCP_AUTO_CONFIRM=1` set, call `propose_append_checklist_items` again. Response has `auto_confirmed: True` and the result inline (no `confirm_action` needed). Restore `AUTO_CONFIRM` off afterwards.
+
+### `propose_prepend_checklist_items`
+
+141. **Prepend to existing checklist** — Using the 3-item to-do from #136 (or restored from #139), call `propose_prepend_checklist_items(todo_id=<uuid>, items=["Step Zero"])`. Confirm. In Things, "Step Zero" now appears first (position 0), followed by A, B, C. Checklist has 4 items.
+
+142. **Undo prepend** — After #141, call `undo()`. Checklist returns to 3 items (A, B, C). "Step Zero" is gone.
+
+### `propose_replace_checklist`
+
+143. **Replace entire checklist** — Using the 3-item to-do, call `propose_replace_checklist(todo_id=<uuid>, items=["New 1", "New 2"])`. Response has `auto_confirmed: False` and a "never auto-confirmed" note (even if `AUTO_CONFIRM=1`). Call `confirm_action`. Checklist is now exactly 2 items: "New 1", "New 2". Old items gone.
+
+144. **Undo replace restores original** — After #143, call `undo()`. Checklist returns to the 3 original items (A, B, C). The new items are gone.
+
+145. **Clear the entire checklist** — Call `propose_replace_checklist(todo_id=<uuid>, items=[])`. Confirm. Checklist is now empty in Things. Call `undo()` — original items restored.
+
+146. **AUTO_CONFIRM cannot bypass replace** — With `THINGS_MCP_AUTO_CONFIRM=1` set, call `propose_replace_checklist`. Response must have `auto_confirmed: False`. The checklist is NOT changed until you call `confirm_action` explicitly. This is the NEVER_BYPASS_KINDS guard.

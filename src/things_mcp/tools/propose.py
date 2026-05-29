@@ -466,6 +466,62 @@ async def propose_delete_heading(
     )
 
 
+async def propose_append_checklist_items(todo_id: str, items: list[str]) -> dict:
+    """Propose appending items to a to-do's checklist.
+
+    Items are appended to the end of the existing checklist. Use
+    ``propose_prepend_checklist_items`` to add to the beginning, or
+    ``propose_replace_checklist`` to overwrite the entire list.
+
+    **Limitation:** per-item edit, delete, completion, or reorder are not
+    supported by the Things URL scheme or AppleScript. Use
+    ``propose_replace_checklist`` to rewrite the whole list.
+    """
+    payload = {"todo_id": todo_id, "items": items}
+    from ..services.handlers import append_checklist as _append_checklist
+    preview = _append_checklist.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=_append_checklist.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_prepend_checklist_items(todo_id: str, items: list[str]) -> dict:
+    """Propose prepending items to a to-do's checklist.
+
+    Items are inserted at the beginning of the existing checklist, in order.
+
+    **Limitation:** per-item edit, delete, completion, or reorder are not
+    supported. Use ``propose_replace_checklist`` to rewrite the whole list.
+    """
+    payload = {"todo_id": todo_id, "items": items}
+    from ..services.handlers import prepend_checklist as _prepend_checklist
+    preview = _prepend_checklist.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=_prepend_checklist.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_replace_checklist(todo_id: str, items: list[str]) -> dict:
+    """Propose replacing a to-do's entire checklist with new items.
+
+    **Never auto-confirmed** — this is a destructive overwrite. Always
+    requires explicit ``confirm_action``.
+
+    Pass ``items=[]`` to clear the checklist entirely. Undo restores the
+    prior checklist snapshot.
+
+    **Limitation:** per-item edit, delete, completion, or reorder are not
+    supported by Things URL scheme or AppleScript — this tool is the only
+    way to restructure a checklist.
+    """
+    payload = {"todo_id": todo_id, "items": items}
+    from ..services.handlers import replace_checklist as _replace_checklist
+    preview = _replace_checklist.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=_replace_checklist.KIND, payload=payload, preview=preview
+    )
+
+
 # ---------- shared helper ----------
 
 
@@ -537,3 +593,6 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_add_heading)
     mcp.tool()(propose_update_heading)
     mcp.tool()(propose_delete_heading)
+    mcp.tool()(propose_append_checklist_items)
+    mcp.tool()(propose_prepend_checklist_items)
+    mcp.tool()(propose_replace_checklist)

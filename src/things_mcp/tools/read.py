@@ -91,3 +91,13 @@ def register(mcp: FastMCP) -> None:
         """Full-text search across titles and notes. Capped at `limit` results."""
         results = things_repo.search(query)
         return results[:limit]
+
+    @mcp.tool()
+    def get_checklist_items(todo_id: str) -> list[dict[str, Any]]:
+        """Checklist items for a to-do, with completion state.
+
+        Returns items in order with ``{uuid, title, status}`` fields.
+        Note: per-item edit, delete, completion, or reorder are not supported
+        — use ``propose_append/prepend/replace_checklist`` to modify the list.
+        """
+        return things_repo.get_checklist_items(todo_id)

@@ -168,6 +168,11 @@ def find_recent_by_title(title: str, created_after: str) -> dict[str, Any] | Non
     return matches[0]
 
 
+def get_checklist_items(todo_id: str) -> list[dict[str, Any]]:
+    """Return checklist items for a to-do (SQLite read via things-py)."""
+    return things.checklist_items(todo_id, **_kw())
+
+
 def get_project_with_headings(project_id: str) -> dict[str, Any] | None:
     """Return a project row augmented with a unified ``headings`` list.
 

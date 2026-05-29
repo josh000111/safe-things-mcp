@@ -48,6 +48,7 @@ NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
     "bulk_complete",
     "bulk_move",
     "bulk_update",
+    "replace_checklist",  # destructive overwrite of entire checklist
 })
 
 WRITE_POLL_TIMEOUT_SECONDS = float(
