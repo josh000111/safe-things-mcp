@@ -23,7 +23,7 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 5B — reorder todos in lists/projects (with native-heading auto-conversion to dummies at original positions) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 5C — checklist tools (`get_checklist_items`, append/prepend/replace via URL scheme) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 5D — `propose_cancel_todo` + `propose_bulk_cancel` (renamed from bulk_delete) | ✅ Done (284→325 tests, +41) | n/a — unit tests only |
-| V2 step 5E — `propose_cancel_project` (URL-scheme) + `propose_delete_project` (AppleScript → Trash) | ✅ Done (284→325 tests, +41) | ⏳ Manual Testing Pending: `propose_delete_project` smoke-test needs Test user session |
+| V2 step 5E — `propose_cancel_project` (URL-scheme) + `propose_delete_project` (AppleScript → Trash) | ✅ Done (284→325 tests, +41) | ✅ Verified (Round 8 — 2026-05-30) |
 | ~~V2 step 6~~ — native heading support via AppleScript | ❌ **Cancelled** — SDEF inspection confirmed Things 3 AppleScript has no `heading` class. Native-heading CRUD is impossible by any mechanism. Dummy headings (Step 4b) are the permanent solution. See §5.3 and §10. | n/a |
 | **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
