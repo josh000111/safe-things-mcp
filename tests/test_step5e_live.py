@@ -20,6 +20,7 @@ Run as the Test user:
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import time
 
@@ -31,7 +32,10 @@ from things_mcp.services.handlers import delete_project
 from things_mcp.state import undo_log
 
 
-pytestmark = pytest.mark.skip(reason="Requires Test user + THINGS_MCP_ALLOW_APPLESCRIPT=1")
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("THINGS_AUTH_TOKEN"),
+    reason="Requires THINGS_AUTH_TOKEN env var (Test user session)",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -70,21 +74,14 @@ def _poll_for_project(project_id: str, timeout: float = 8.0) -> dict | None:
 
 
 def _in_trash_via_applescript(project_id: str) -> bool:
-    """Return True if the project appears in Things Trash."""
-    safe_id = applescript.escape(project_id)
-    script = (
-        f'tell application "Things3"\n'
-        f'    set trashItems to projects of list "Trash"\n'
-        f'    repeat with p in trashItems\n'
-        f'        if id of p is "{safe_id}" then return "FOUND"\n'
-        f'    end repeat\n'
-        f'    return "NOT FOUND"\n'
-        f'end tell'
-    )
-    result = subprocess.run(
-        ["osascript", "-e", script], capture_output=True, text=True, timeout=10
-    )
-    return result.stdout.strip() == "FOUND"
+    """Return True if the project appears in Things Trash.
+
+    Uses the things Python library (SQLite read) rather than AppleScript
+    enumeration — Things 3 does not expose ``projects of list "Trash"`` via
+    its AppleScript dictionary.
+    """
+    trash_items = things_repo.trash()
+    return any(item.get("uuid") == project_id for item in trash_items)
 
 
 # ---------------------------------------------------------------------------
