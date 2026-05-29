@@ -22,7 +22,8 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 5A — opt-in AppleScript foundation + `propose_delete_todo` (hard-delete → Trash); soft-delete removed | ✅ Done (280 tests pass; `applescript.py`, `hard_delete_todo` handler renamed to `propose_delete_todo`, `health()` extended) | ⏳ Manual Testing Session: items 131–135 verified except live round-trip (`test_132_133_hard_delete_and_undo`) — needs re-run as Test user with multi-line undo fix |
 | V2 step 5B — reorder todos in lists/projects (with native-heading auto-conversion to dummies at original positions) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
 | V2 step 5C — checklist tools (`get_checklist_items`, append/prepend/replace via URL scheme) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
-| V2 step 5D — `propose_cancel_todo` (URL-scheme cancel → Logbook; no AppleScript) | ⏳ Not built | n/a — unit tests only |
+| V2 step 5D — `propose_cancel_todo` (URL-scheme cancel → Logbook) + `propose_bulk_delete` cleanup | ⏳ Not built | n/a — unit tests only |
+| V2 step 5E — `propose_cancel_project` (URL-scheme) + `propose_delete_project` (AppleScript → Trash) | ⏳ Not built | n/a for cancel (unit tests only); AppleScript delete path needs 1 smoke-test item in Test account |
 | ~~V2 step 6~~ — native heading support via AppleScript | ❌ **Cancelled** — SDEF inspection confirmed Things 3 AppleScript has no `heading` class. Native-heading CRUD is impossible by any mechanism. Dummy headings (Step 4b) are the permanent solution. See §5.3 and §10. | n/a |
 | **Pre-release fix A** — tag pre-validation for all write tools (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
 | **Pre-release fix B** — tags missing from `get_project` / `get_todo` responses (see §11) | ✅ Done | ✅ Verified (Round 6 — 2026-05-26) |
@@ -232,6 +233,8 @@ Mutating tools split into two tiers based on risk. **Low-risk direct shortcuts**
 | `propose_bulk_*(...)` | `confirm_action` — **never bypassable** | Multi-target = high blast radius. |
 | `propose_add_project(...)` | `confirm_action` | Project creation supports headings via `things:///json` payload. |
 | `propose_update_project(...)` | `confirm_action` | Edits live project. |
+| `propose_cancel_project(project_id)` (step 5E) | `confirm_action` | URL scheme `update-project?canceled=true` → project moves to Logbook. Reversible. No AppleScript required. |
+| `propose_delete_project(project_id)` (step 5E) | `confirm_action` — **never bypassable** | AppleScript `delete (project id "X")` → project (and all its tasks) moves to Things Trash. Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`. |
 | `propose_add_heading(project_id, name)` (dummy-only, **permanent**) | `confirm_action` | Creates a `__NAME__` dummy task. Native headings inside an *existing* project are not creatable by any scripted mechanism — AppleScript has no `heading` class. See §5.3 and §10. |
 | `propose_update_heading(...)`, `propose_delete_heading(...)` (dummy-only, **permanent**) | `confirm_action` | Operate only on dummy `__NAME__` tasks via URL scheme. Native headings are not mutable by any scripted mechanism. |
 | `propose_append_checklist_items(todo_id, items)` (step 5C) | `confirm_action` | URL scheme `&append-checklist-items=...`. Reversible via `propose_replace_checklist` to prior snapshot. |
@@ -378,12 +381,20 @@ Tool docstrings + README must explicitly state: *"To change a single item, repla
 5. `health()` extended with `applescript_enabled`, `experimental_reorder_enabled`, `applescript_authorized`, `reorder_command_available` (SDEF grep for `THGSreot`, cached).
 6. **Soft-delete removed:** `propose_delete_todo` formerly marked tasks `canceled+completed` (→ Logbook). That tool and its handler are now tombstoned. To cancel (not delete) a task, see Step 5D.
 
-**Step 5D — `propose_cancel_todo` (URL-scheme cancel → Logbook):**
-Cancel a task natively (Things "Cancel" action) without deleting it.
+**Step 5D — `propose_cancel_todo` + `propose_bulk_delete` cleanup (URL-scheme only):**
+Cancel a task natively (Things "Cancel" action) without deleting it. Also fixes `propose_bulk_delete` which still uses the old soft-delete approach.
 1. `services/url_scheme.py` — add `build_cancel_url(id, auth_token)` that sets `canceled=True` only (not `completed=True`).
 2. `services/handlers/cancel_todo.py` — execute sets `canceled=True`; undo restores `canceled=False`. Snapshot before-state so undo is clean. NOT in `NEVER_BYPASS_KINDS` (cancelling is reversible and low-risk).
 3. `propose_cancel_todo(todo_id)` in `tools/propose.py`.
-4. Unit tests sufficient — URL-scheme cancel is hermetic (no AppleScript, no manual verification needed). Add to automated suite.
+4. **`propose_bulk_delete` fix:** the `bulk_delete` handler currently uses the old soft-delete mechanism (marks `canceled+completed` → Logbook). Decide and implement one of: (a) update it to use the AppleScript hard-delete path (requires `ALLOW_APPLESCRIPT=1`, moves batch to Trash) — consistent with `propose_delete_todo`; or (b) rename/re-describe it as `propose_bulk_cancel` to honestly reflect the behaviour. Whichever is chosen, the handler, tests, and tool docstring must all agree.
+5. Unit tests sufficient for both — no manual testing session needed. Add to automated suite.
+
+**Step 5E — `propose_delete_project` + `propose_cancel_project` (URL-scheme only):**
+Currently there is no way to delete or cancel a whole project through the MCP. Things URL scheme supports both operations.
+1. `propose_cancel_project(project_id)` — sets `canceled=True` on the project via URL scheme → project moves to Logbook. Undo restores `canceled=False`. NOT in `NEVER_BYPASS_KINDS`.
+2. `propose_delete_project(project_id)` — AppleScript `delete (project id "X")` → project moves to Things Trash (same mechanics as `propose_delete_todo`). Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`. Always `NEVER_BYPASS_KINDS`. Undo uses `move (project id "X") to list "X"`.
+3. Note: deleting a project via AppleScript moves the project *and all its tasks* to Trash as a unit. Confirm this behaviour in Things SDEF before implementing; document clearly in the tool preview.
+4. Unit tests sufficient for both — no manual testing session needed for cancel (URL scheme). The hard-delete (AppleScript) path should be smoke-tested in the Test account as part of the same session that closes Step 5A (add item to `test_step5a_live.py` or a new `test_step5e_live.py`).
 
 **Step 5B — reorder todos (with native-heading auto-conversion):**
 1. `services/reorder.py` — `build_master_order()` for the Unified Master List Overwrite strategy (partial reorders preserve surrounding positions); `detect_native_headings()`; `resolve_container()` for smart list-vs-project routing.
