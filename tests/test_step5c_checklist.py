@@ -484,6 +484,20 @@ class TestProposeChecklistFunctions:
         assert "action_id" in result
         assert result["auto_confirmed"] is False
 
+    async def test_propose_append_auto_confirms_when_flag_set(self, monkeypatch):
+        from things_mcp.tools import propose
+        from things_mcp.services import handlers
+
+        monkeypatch.setattr(config, "AUTO_CONFIRM", True)
+        fake_result = {"action_kind": "append_checklist", "appended_count": 2, "total_items": 5}
+        async def _fake_execute(_): return fake_result
+        monkeypatch.setattr(handlers.get("append_checklist"), "execute", _fake_execute)
+        result = await propose.propose_append_checklist_items(
+            todo_id="abc", items=["x", "y"]
+        )
+        assert result["auto_confirmed"] is True
+        assert "result" in result
+
     async def test_propose_replace_checklist_cannot_auto_confirm(self, monkeypatch):
         from things_mcp.tools import propose
 
