@@ -5,7 +5,7 @@ description = "Local MCP server for Cultured Code's Things 3 on macOS"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Josh Smith" }]
+authors = []
 dependencies = [
     "mcp>=1.2.0",
     "things.py>=0.0.15",
