@@ -40,6 +40,7 @@ from . import (
     move_todo,
     prepend_checklist,
     replace_checklist,
+    reorder_todos,
     update_heading,
     update_project,
     update_todo,
@@ -77,6 +78,7 @@ REGISTRY: dict[str, Handler] = {
     append_checklist.KIND: append_checklist,  # type: ignore[dict-item]
     prepend_checklist.KIND: prepend_checklist,  # type: ignore[dict-item]
     replace_checklist.KIND: replace_checklist,  # type: ignore[dict-item]
+    reorder_todos.KIND: reorder_todos,  # type: ignore[dict-item]
 }
 
 

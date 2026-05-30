@@ -168,6 +168,31 @@ def find_recent_by_title(title: str, created_after: str) -> dict[str, Any] | Non
     return matches[0]
 
 
+def get_container_todo_uuids(container_type: str, container_id: str) -> list[str]:
+    """Return ordered list of to-do UUIDs in the container.
+
+    For projects: returns UUIDs of items with type=="to-do" only
+    (native headings excluded — handled separately).
+    For built-in lists: returns UUIDs in Things' current display order.
+    Raises ValueError for unknown list names or missing projects.
+    """
+    if container_type == "project":
+        proj = project(container_id)
+        if proj is None:
+            raise ValueError(f"Project {container_id!r} not found.")
+        return [item["uuid"] for item in (proj.get("items") or [])
+                if item.get("type") == "to-do"]
+    _LIST_FN = {
+        "Inbox": inbox, "Today": today, "Anytime": anytime,
+        "Someday": someday, "Upcoming": upcoming,
+        "Logbook": logbook, "Trash": trash,
+    }
+    fn = _LIST_FN.get(container_id)
+    if fn is None:
+        raise ValueError(f"Unknown list: {container_id!r}")
+    return [t["uuid"] for t in fn()]
+
+
 def get_checklist_items(todo_id: str) -> list[dict[str, Any]]:
     """Return checklist items for a to-do (SQLite read via things-py)."""
     return things.checklist_items(todo_id, **_kw())

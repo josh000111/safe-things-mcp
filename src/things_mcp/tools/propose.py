@@ -501,6 +501,60 @@ async def propose_prepend_checklist_items(todo_id: str, items: list[str]) -> dic
     )
 
 
+async def propose_reorder_todos(container: str, new_order: list[str]) -> dict:
+    """Propose reordering to-dos in a list or project.
+
+    container: built-in list name ("inbox", "today", "anytime", "someday")
+               or a project UUID.
+    new_order: list of to-do UUIDs in the desired order. May be a complete
+               list (full reorder) or a partial list (partial reorder —
+               specified UUIDs are placed in the given relative order at
+               their original sorted positions; other todos keep relative
+               positions).
+
+    Requires THINGS_MCP_ALLOW_APPLESCRIPT=1 and
+    THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER=1.
+
+    Projects with native headings: native headings are auto-converted to
+    dummy heading tasks at their original positions before reorder. The
+    original empty native headings appear at the project bottom and must
+    be deleted manually. Undo cannot reinstate native heading positions.
+    """
+    if not new_order:
+        raise ValueError("new_order must contain at least one UUID.")
+
+    from ..services.reorder import (
+        resolve_container, build_master_order, detect_native_headings_in_project,
+    )
+    from ..services import things_repo as _things_repo
+    from ..services.handlers import reorder_todos as _reorder_todos
+
+    container_type, container_id = resolve_container(container)
+    current_uuids = _things_repo.get_container_todo_uuids(container_type, container_id)
+    master_order = build_master_order(current_uuids, new_order)
+
+    proj_row = _things_repo.project(container_id) if container_type == "project" else None
+    native_headings = detect_native_headings_in_project(proj_row)
+    dummy_creation_plan = [
+        {"name": h["name"], "todo_position": h["todo_position"]}
+        for h in native_headings
+    ]
+
+    payload = {
+        "container_type": container_type,
+        "container_id": container_id,
+        "master_order": master_order,
+        "dummy_creation_plan": dummy_creation_plan,
+        "original_order": current_uuids,
+        "created_dummy_uuids": [],
+    }
+
+    preview = _reorder_todos.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=_reorder_todos.KIND, payload=payload, preview=preview
+    )
+
+
 async def propose_replace_checklist(todo_id: str, items: list[str]) -> dict:
     """Propose replacing a to-do's entire checklist with new items.
 
@@ -596,3 +650,4 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_append_checklist_items)
     mcp.tool()(propose_prepend_checklist_items)
     mcp.tool()(propose_replace_checklist)
+    mcp.tool()(propose_reorder_todos)

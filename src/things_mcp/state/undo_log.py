@@ -94,6 +94,15 @@ def recent(limit: int = 20) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def list() -> list[dict[str, Any]]:
+    """Return all undo_log entries, newest first."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id FROM undo_log ORDER BY created_at DESC"
+        ).fetchall()
+    return [{"id": r["id"]} for r in rows]
+
+
 def get(entry_id: str) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute("SELECT * FROM undo_log WHERE id = ?", (entry_id,)).fetchone()
