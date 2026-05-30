@@ -30,12 +30,6 @@ ALLOW_APPLESCRIPT = os.environ.get("THINGS_MCP_ALLOW_APPLESCRIPT", "").strip().l
     "1", "true", "yes", "on",
 }
 
-# When set, enables the experimental reorder command (requires ALLOW_APPLESCRIPT too).
-# Default off.
-ALLOW_EXPERIMENTAL_REORDER = os.environ.get(
-    "THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER", ""
-).strip().lower() in {"1", "true", "yes", "on"}
-
 # Action kinds that must NEVER auto-confirm, regardless of THINGS_MCP_AUTO_CONFIRM.
 # Anything destructive or multi-target lives here. New kinds added in later
 # chunks (chunk C delete, chunk E bulk_*) are pre-listed so the gate is in

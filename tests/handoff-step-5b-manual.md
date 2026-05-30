@@ -37,7 +37,6 @@ at the **Test user's** Things library with both AppleScript flags set:
 ```bash
 THINGS_AUTH_TOKEN=<test-user-token> \
 THINGS_MCP_ALLOW_APPLESCRIPT=1 \
-THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER=1 \
 uv --directory /Users/Shared/things-mcp run things-mcp
 ```
 

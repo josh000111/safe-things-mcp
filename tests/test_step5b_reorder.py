@@ -42,7 +42,6 @@ def fast_polling(monkeypatch):
 @pytest.fixture
 def with_applescript(monkeypatch):
     monkeypatch.setattr(config, "ALLOW_APPLESCRIPT", True)
-    monkeypatch.setattr(config, "ALLOW_EXPERIMENTAL_REORDER", True)
 
 
 @pytest.fixture
@@ -352,23 +351,7 @@ class TestExecute:
     @pytest.mark.asyncio
     async def test_raises_if_applescript_disabled(self, monkeypatch):
         monkeypatch.setattr(config, "ALLOW_APPLESCRIPT", False)
-        monkeypatch.setattr(config, "ALLOW_EXPERIMENTAL_REORDER", True)
         with pytest.raises(RuntimeError, match="THINGS_MCP_ALLOW_APPLESCRIPT"):
-            await reorder_todos.execute(
-                {
-                    "container_type": "list",
-                    "container_id": "Today",
-                    "master_order": ["T1"],
-                    "dummy_creation_plan": [],
-                    "original_order": ["T1"],
-                }
-            )
-
-    @pytest.mark.asyncio
-    async def test_raises_if_experimental_reorder_disabled(self, monkeypatch):
-        monkeypatch.setattr(config, "ALLOW_APPLESCRIPT", True)
-        monkeypatch.setattr(config, "ALLOW_EXPERIMENTAL_REORDER", False)
-        with pytest.raises(RuntimeError, match="THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER"):
             await reorder_todos.execute(
                 {
                     "container_type": "list",

@@ -82,11 +82,11 @@ def _in_trash_via_applescript(todo_id: str) -> bool:
 def _health_snapshot() -> dict:
     """Return the same fields health() would report."""
     reorder_available = (
-        meta_mod._reorder_command_available() if config.ALLOW_EXPERIMENTAL_REORDER else None
+        meta_mod._reorder_command_available() if config.ALLOW_APPLESCRIPT else None
     )
     return {
         "applescript_enabled": config.ALLOW_APPLESCRIPT,
-        "experimental_reorder_enabled": config.ALLOW_EXPERIMENTAL_REORDER,
+        "experimental_reorder_enabled": config.ALLOW_APPLESCRIPT,
         "applescript_authorized": meta_mod._applescript_authorized(),
         "reorder_command_available": reorder_available,
     }
@@ -119,9 +119,9 @@ def test_134_flags_off_health_fields():
     assert snap["applescript_enabled"] is False, (
         f"applescript_enabled should be False without patch; got {snap['applescript_enabled']}"
     )
-    assert snap["experimental_reorder_enabled"] is False
+    assert snap["experimental_reorder_enabled"] is False  # mirrors applescript_enabled
     assert snap["reorder_command_available"] is None, (
-        f"reorder_command_available must be null when flag is off; got {snap['reorder_command_available']}"
+        f"reorder_command_available must be null when ALLOW_APPLESCRIPT is off; got {snap['reorder_command_available']}"
     )
     assert snap["applescript_authorized"] == "unknown"
 
@@ -134,8 +134,8 @@ def test_135_applescript_flag_on_health_before_call(applescript_on):
     """Item 135 pre-call: applescript_enabled=True, authorized still 'unknown'."""
     snap = _health_snapshot()
     assert snap["applescript_enabled"] is True
-    assert snap["experimental_reorder_enabled"] is False
-    assert snap["reorder_command_available"] is None   # ALLOW_EXPERIMENTAL_REORDER not set
+    assert snap["experimental_reorder_enabled"] is True  # mirrors applescript_enabled
+    assert snap["reorder_command_available"] is not None  # checked when ALLOW_APPLESCRIPT is on
     assert snap["applescript_authorized"] == "unknown"
 
 

@@ -512,8 +512,7 @@ async def propose_reorder_todos(container: str, new_order: list[str]) -> dict:
                their original sorted positions; other todos keep relative
                positions).
 
-    Requires THINGS_MCP_ALLOW_APPLESCRIPT=1 and
-    THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER=1.
+    Requires THINGS_MCP_ALLOW_APPLESCRIPT=1.
 
     Projects with native headings: native headings are auto-converted to
     dummy heading tasks at their original positions before reorder. The

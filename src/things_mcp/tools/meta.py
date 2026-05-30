@@ -9,7 +9,6 @@ from mcp.server.fastmcp import FastMCP
 
 from ..config import (
     ALLOW_APPLESCRIPT,
-    ALLOW_EXPERIMENTAL_REORDER,
     STATE_DB_PATH,
     THINGS_AUTH_TOKEN,
     THINGS_DB_PATH,
@@ -77,7 +76,7 @@ def register(mcp: FastMCP) -> None:
     def health() -> dict:
         """Diagnostics: DB paths, Things app status, package versions, AppleScript flags."""
         reorder_available: bool | None = None
-        if ALLOW_EXPERIMENTAL_REORDER:
+        if ALLOW_APPLESCRIPT:
             reorder_available = _reorder_command_available()
 
         return HealthReport(
@@ -89,7 +88,7 @@ def register(mcp: FastMCP) -> None:
             state_db_exists=STATE_DB_PATH.exists(),
             url_scheme_auth_token_set=bool(THINGS_AUTH_TOKEN),
             applescript_enabled=ALLOW_APPLESCRIPT,
-            experimental_reorder_enabled=ALLOW_EXPERIMENTAL_REORDER,
+            experimental_reorder_enabled=ALLOW_APPLESCRIPT,
             applescript_authorized=_applescript_authorized(),
             reorder_command_available=reorder_available,
         ).model_dump()

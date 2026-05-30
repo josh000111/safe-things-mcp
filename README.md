@@ -68,8 +68,7 @@ The server speaks MCP over stdio. Point any client at
       "args": ["--directory", "/absolute/path/to/things-mcp", "run", "things-mcp"],
       "env": {
         "THINGS_AUTH_TOKEN": "paste-token-here",
-        "THINGS_MCP_ALLOW_APPLESCRIPT": "1",
-        "THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER": "1"
+        "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
       }
     }
   }
@@ -94,8 +93,7 @@ Use the same command/args as Claude Desktop, and add an `env` block with `THINGS
 | `THINGS_MCP_STATE_DIR` | `~/.things-mcp` | Where `state.db` lives. |
 | `THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for the URL-scheme callback. |
 | `THINGS_AUTH_TOKEN` | unset | Required for every mutating tool (update / move / delete / project ops / bulk_*). Read tools and add_inbox_todo / add_today_todo / add_anytime_todo / add_someday_todo don't need it. See First-run setup above. |
-| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable AppleScript-backed operations: hard-delete (`propose_delete_todo`, `propose_delete_project`) and reorder (`propose_reorder_todos`). Off by default — when the process first calls an AppleScript op, macOS shows an Automation permission prompt for Things 3. Set it in the same `env` block as `THINGS_AUTH_TOKEN` (see First-run setup). Also requires `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER=1` for reorder specifically. |
-| `THINGS_MCP_ALLOW_EXPERIMENTAL_REORDER` | unset | Set to `1` (alongside `THINGS_MCP_ALLOW_APPLESCRIPT=1`) to enable `propose_reorder_todos`. The underlying `_private_experimental_ reorder to dos` AppleScript command is undocumented and may change in future Things releases. Off by default as an extra opt-in gate. |
+| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable AppleScript-backed operations: hard-delete (`propose_delete_todo`, `propose_delete_project`) and reorder (`propose_reorder_todos`). Off by default — when the process first calls an AppleScript op, macOS shows an Automation permission prompt for Things 3. Set it in the same `env` block as `THINGS_AUTH_TOKEN` (see First-run setup). |
 | `THINGS_MCP_AUTO_CONFIRM` | unset | Set to `1` to have `propose_*` tools execute immediately without a second `confirm_action` call. Destructive / bulk kinds are never auto-confirmed regardless. |
 
 ## Architecture
