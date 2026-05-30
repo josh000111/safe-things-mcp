@@ -21,14 +21,14 @@ more.
 ```bash
 git clone <this repo> things-mcp
 cd things-mcp
-uv venv
+uv venv --python /opt/homebrew/bin/python3   # must be a system Python — see macOS Permission Prompts
 uv sync
 ```
 
 Sanity check:
 
 ```bash
-uv run things-mcp --help    # FastMCP help, or stdio if no flags
+.venv/bin/things-mcp --help
 ```
 
 ## First-run setup
@@ -46,9 +46,36 @@ needed for mutating tools (any `propose_*` tool or direct write other than
 
 Verify with: ask the agent *"call health()"* → `url_scheme_auth_token_set: true`.
 
-> **macOS permission prompt:** the first time a delete or advanced operation
-> runs, macOS will ask *"things-mcp wants to control Things 3 — Allow?"*.
-> Click Allow. This prompt appears once and is not shown again.
+### macOS Permission Prompts
+
+things-mcp triggers two distinct macOS permission dialogs. Both are one-time —
+click **Allow** on each and they will not appear again.
+
+**1. "python3.11 would like to access data from other apps"**
+
+Appears on the very first launch. things-mcp reads the Things 3 database
+directly from its protected app-container folder; macOS requires your consent
+before any other process can access another app's data.
+
+Click **Allow**. The grant is tied to the specific Python binary in your
+`.venv` (Homebrew's `python3.11`). It will **not** recur unless you explicitly
+run `brew upgrade python@3.11` and recreate the venv — an intentional,
+infrequent action.
+
+> **Why you must use a system Python for the venv (`uv venv --python
+> /opt/homebrew/bin/python3`):** if you run plain `uv venv`, uv manages the
+> Python interpreter itself and stores it at a versioned path inside
+> `~/.local/share/uv/python/` (e.g.
+> `cpython-3.13.x-macos-aarch64-none/bin/python3.13`). That path changes with
+> every uv-managed Python update, so macOS sees a new binary each time and
+> re-prompts on every session. A Homebrew Python has a stable path that only
+> changes when you explicitly upgrade it.
+
+**2. "things-mcp wants to control Things 3"**
+
+Appears the first time an AppleScript-backed operation runs (requires
+`THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow**. Truly one-time — this
+grant never resets unless you revoke it in System Settings.
 
 ## Tools
 
@@ -197,8 +224,8 @@ ignore it — pending actions expire after 5 minutes.
 
 ## Client config
 
-The server speaks MCP over stdio. Point any client at
-`uv --directory /absolute/path/to/things-mcp run things-mcp`.
+The server speaks MCP over stdio. Point any client at the venv's entry point:
+`/absolute/path/to/things-mcp/.venv/bin/things-mcp`.
 
 ### Claude Desktop — `~/Library/Application Support/Claude/claude_desktop_config.json`
 
@@ -206,8 +233,7 @@ The server speaks MCP over stdio. Point any client at
 {
   "mcpServers": {
     "things": {
-      "command": "uv",
-      "args": ["--directory", "/absolute/path/to/things-mcp", "run", "things-mcp"],
+      "command": "/absolute/path/to/things-mcp/.venv/bin/things-mcp",
       "env": {
         "THINGS_AUTH_TOKEN": "paste-token-here",
         "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
@@ -223,12 +249,13 @@ The server speaks MCP over stdio. Point any client at
 claude mcp add things \
   -e THINGS_AUTH_TOKEN=paste-token-here \
   -e THINGS_MCP_ALLOW_APPLESCRIPT=1 \
-  -- uv --directory /absolute/path/to/things-mcp run things-mcp
+  -- /absolute/path/to/things-mcp/.venv/bin/things-mcp
 ```
 
 ### Cursor — Settings → MCP → Add Server
 
-Use the same command/args as Claude Desktop, and add an `env` block with `THINGS_AUTH_TOKEN` set to your token.
+Use the same command as Claude Desktop (no `args` needed), and add an `env`
+block with `THINGS_AUTH_TOKEN` set to your token.
 
 ## Environment
 
@@ -238,7 +265,7 @@ Use the same command/args as Claude Desktop, and add an `env` block with `THINGS
 | `THINGS_MCP_STATE_DIR` | `~/.things-mcp` | Where `state.db` lives. |
 | `THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for URL-scheme write confirmation. |
 | `THINGS_AUTH_TOKEN` | unset | Required for all mutating tools (`propose_*` and direct writes other than `add_inbox_todo`). Read tools and `add_inbox_todo` work without it. See First-run setup. |
-| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable AppleScript-backed operations: delete to Trash (`propose_delete_todo`, `propose_delete_project`) and certain advanced task management operations. Off by default — the first AppleScript call triggers a one-time macOS Automation permission prompt for Things 3. Set alongside `THINGS_AUTH_TOKEN`. |
+| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable AppleScript-backed operations: delete to Trash (`propose_delete_todo`, `propose_delete_project`) and certain advanced task management operations. Off by default — the first AppleScript call triggers a one-time macOS Automation permission prompt ("things-mcp wants to control Things 3"). Set alongside `THINGS_AUTH_TOKEN`. |
 | `THINGS_MCP_AUTO_CONFIRM` | unset | Set to `1` to skip the confirm round-trip for `propose_*` tools — they execute immediately and return a summary. Destructive and bulk operations always require explicit `confirm_action()` regardless. |
 
 ## Architecture
