@@ -288,8 +288,8 @@ def build_update_project_url(
     Mirrors :func:`build_update_url` for to-dos; the parameter names that
     differ on the URL-scheme side (``area-id``) are translated here.
 
-    ``completed=True, canceled=True`` together is the soft-delete shape the
-    ``add_project`` undo path relies on (analogous to the to-do soft-delete).
+    ``completed=True, canceled=True`` together is the cancel-to-Logbook shape the
+    ``add_project`` undo path relies on (analogous to the to-do cancel-to-Logbook path).
     """
     if not id:
         raise ValueError("id is required")

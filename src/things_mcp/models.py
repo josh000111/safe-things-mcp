@@ -123,7 +123,7 @@ class ProposeMoveTodoInput(BaseModel):
     target: str = Field(..., min_length=1)
 
 
-class ProposeHardDeleteTodoInput(BaseModel):
+class ProposeDeleteTodoInput(BaseModel):
     """V2 step 5A — propose deleting a to-do via AppleScript.
 
     Moves the task to Things Trash (the same as deleting manually in the

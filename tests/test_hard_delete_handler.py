@@ -12,7 +12,7 @@ import pytest
 
 from things_mcp import config
 from things_mcp.services import applescript, things_repo
-from things_mcp.services.handlers import hard_delete_todo
+from things_mcp.services.handlers import delete_todo
 from things_mcp.state import undo_log
 
 
@@ -61,7 +61,7 @@ def _todo(uuid: str = "todo-abc", title: str = "Test todo", list_name: str = "In
 
 
 def test_kind_constant():
-    assert hard_delete_todo.KIND == "delete_todo"
+    assert delete_todo.KIND == "delete_todo"
 
 
 def test_kind_in_never_bypass_kinds():
@@ -74,7 +74,7 @@ def test_kind_in_never_bypass_kinds():
 async def test_execute_raises_when_applescript_disabled(monkeypatch):
     monkeypatch.setattr(config, "ALLOW_APPLESCRIPT", False)
     with pytest.raises(RuntimeError, match="THINGS_MCP_ALLOW_APPLESCRIPT"):
-        await hard_delete_todo.execute({"todo_id": "todo-abc"})
+        await delete_todo.execute({"todo_id": "todo-abc"})
 
 
 # ---------- execute — input validation ----------
@@ -83,13 +83,13 @@ async def test_execute_raises_when_applescript_disabled(monkeypatch):
 async def test_execute_raises_when_todo_missing(applescript_enabled, monkeypatch):
     monkeypatch.setattr(things_repo, "get_todo", lambda uuid: None)
     with pytest.raises(ValueError, match="No to-do found"):
-        await hard_delete_todo.execute({"todo_id": "ghost-uuid"})
+        await delete_todo.execute({"todo_id": "ghost-uuid"})
 
 
 async def test_execute_raises_when_already_in_trash(applescript_enabled, monkeypatch):
     monkeypatch.setattr(things_repo, "get_todo", lambda uuid: _todo(list_name="Trash"))
     with pytest.raises(ValueError, match="already in Trash"):
-        await hard_delete_todo.execute({"todo_id": "todo-abc"})
+        await delete_todo.execute({"todo_id": "todo-abc"})
 
 
 # ---------- execute — undo_log written BEFORE AppleScript (V2 acceptance gate) ----------
@@ -108,7 +108,7 @@ async def test_undo_log_written_before_applescript(applescript_enabled, monkeypa
 
     monkeypatch.setattr(applescript, "run_script", recording_run)
 
-    await hard_delete_todo.execute({"todo_id": "todo-abc"})
+    await delete_todo.execute({"todo_id": "todo-abc"})
 
     assert len(pre_script_rows) == 1
     assert pre_script_rows[0]["action_kind"] == "delete_todo"
@@ -123,7 +123,7 @@ async def test_execute_calls_applescript_delete(
 ):
     monkeypatch.setattr(things_repo, "get_todo", lambda uuid: _todo())
 
-    await hard_delete_todo.execute({"todo_id": "todo-abc"})
+    await delete_todo.execute({"todo_id": "todo-abc"})
 
     assert len(captured_scripts) == 1
     script = captured_scripts[0]
@@ -137,7 +137,7 @@ async def test_execute_returns_undo_id_and_note(
 ):
     monkeypatch.setattr(things_repo, "get_todo", lambda uuid: _todo(title="My Task"))
 
-    result = await hard_delete_todo.execute({"todo_id": "todo-abc"})
+    result = await delete_todo.execute({"todo_id": "todo-abc"})
 
     assert result["action_kind"] == "delete_todo"
     assert result["id"] == "todo-abc"
@@ -154,7 +154,7 @@ async def test_execute_escapes_todo_id_in_script(
     safe_uuid = "AAAA-BBBB"
     monkeypatch.setattr(things_repo, "get_todo", lambda uuid: _todo(uuid=safe_uuid))
 
-    await hard_delete_todo.execute({"todo_id": safe_uuid})
+    await delete_todo.execute({"todo_id": safe_uuid})
 
     assert f'"{safe_uuid}"' in captured_scripts[0]
 
@@ -165,7 +165,7 @@ async def test_execute_escapes_todo_id_in_script(
 async def test_undo_raises_when_applescript_disabled(monkeypatch):
     monkeypatch.setattr(config, "ALLOW_APPLESCRIPT", False)
     with pytest.raises(RuntimeError, match="THINGS_MCP_ALLOW_APPLESCRIPT"):
-        await hard_delete_todo.undo({
+        await delete_todo.undo({
             "id": "entry-1",
             "action_kind": "delete_todo",
             "target_uuid": "todo-abc",
@@ -191,7 +191,7 @@ async def test_undo_restores_to_original_list(
         after_state={"status": "trashed"},
     )
 
-    result = await hard_delete_todo.undo(undo_log.get(entry_id))
+    result = await delete_todo.undo(undo_log.get(entry_id))
 
     assert result["undone"] is True
     assert result["target_uuid"] == "todo-abc"
@@ -222,7 +222,7 @@ async def test_undo_restores_to_original_project(
         after_state={"status": "trashed"},
     )
 
-    result = await hard_delete_todo.undo(undo_log.get(entry_id))
+    result = await delete_todo.undo(undo_log.get(entry_id))
 
     assert result["undone"] is True
     script = captured_scripts[0]
@@ -249,7 +249,7 @@ async def test_undo_falls_back_to_inbox_for_unknown_list(
         after_state={"status": "trashed"},
     )
 
-    await hard_delete_todo.undo(undo_log.get(entry_id))
+    await delete_todo.undo(undo_log.get(entry_id))
 
     script = captured_scripts[0]
     assert "Inbox" in script
@@ -259,14 +259,14 @@ async def test_undo_falls_back_to_inbox_for_unknown_list(
 
 
 def test_make_preview_mentions_trash_and_undo():
-    preview = hard_delete_todo.make_preview({"todo_id": "todo-abc"})
+    preview = delete_todo.make_preview({"todo_id": "todo-abc"})
     assert "todo-abc" in preview
     assert "Trash" in preview
     assert "undo" in preview.lower()
 
 
 def test_make_preview_uses_snapshot_title_when_available():
-    preview = hard_delete_todo.make_preview({
+    preview = delete_todo.make_preview({
         "todo_id": "todo-abc",
         "snapshot": {"title": "My Important Task"},
     })
@@ -288,4 +288,4 @@ def test_make_preview_uses_snapshot_title_when_available():
     ("custom", "Inbox"), # unknown → Inbox fallback
 ])
 def test_normalise_list_name(raw, expected):
-    assert hard_delete_todo._normalise_list_name(raw) == expected
+    assert delete_todo._normalise_list_name(raw) == expected

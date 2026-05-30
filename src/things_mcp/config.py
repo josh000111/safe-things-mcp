@@ -24,7 +24,7 @@ AUTO_CONFIRM = os.environ.get("THINGS_MCP_AUTO_CONFIRM", "").strip().lower() in 
     "1", "true", "yes", "on",
 }
 
-# When set, AppleScript-backed operations (hard-delete, reorder) are enabled.
+# When set, AppleScript-backed operations (delete to Trash, reorder) are enabled.
 # Default off — requires explicit opt-in.
 ALLOW_APPLESCRIPT = os.environ.get("THINGS_MCP_ALLOW_APPLESCRIPT", "").strip().lower() in {
     "1", "true", "yes", "on",
@@ -35,9 +35,9 @@ ALLOW_APPLESCRIPT = os.environ.get("THINGS_MCP_ALLOW_APPLESCRIPT", "").strip().l
 # chunks (chunk C delete, chunk E bulk_*) are pre-listed so the gate is in
 # place when those handlers ship.
 NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
-    "delete_todo",      # AppleScript hard-delete → Things Trash
+    "delete_todo",      # AppleScript delete → Things Trash
     "delete_heading",
-    "delete_project",   # AppleScript hard-delete → Things Trash
+    "delete_project",   # AppleScript delete → Things Trash
     "bulk_cancel",
     "bulk_complete",
     "bulk_move",

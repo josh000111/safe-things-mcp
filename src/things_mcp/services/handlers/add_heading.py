@@ -8,7 +8,7 @@ The ``after_todo_id`` parameter is accepted in the payload but CANNOT be
 honoured by the URL scheme — the task will be appended at an unspecified
 position. This is noted in the preview and result.
 
-Undo: soft-delete the dummy task (same approach as ``add_todo`` undo).
+Undo: cancel the dummy task (marks completed/canceled, moves to Logbook).
 Requires ``THINGS_AUTH_TOKEN``.
 """
 from __future__ import annotations
@@ -147,7 +147,7 @@ async def undo(undo_entry: dict) -> dict:
         "action_kind": KIND,
         "target_uuid": target_uuid,
         "status": verified.get("status"),
-        "note": "Dummy heading soft-deleted (marked completed/canceled).",
+        "note": "Dummy heading cancelled (marked completed/canceled).",
     }
 
 

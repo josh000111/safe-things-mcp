@@ -16,9 +16,9 @@ async def undo(undo_id: str | None = None) -> dict:
     """Reverse the most recent reversible action (or ``undo_id`` if
     given). Returns a description of what was undone.
 
-    For ``add_todo`` actions, undo is currently a *soft-undo* (marks the
-    task completed and canceled). True hard-delete arrives with
-    ``propose_delete_todo``.
+    For ``add_todo`` actions, undo is a cancel-to-Logbook: the task is
+    marked completed and canceled, moving it out of active lists.
+    To permanently delete a task, use ``propose_delete_todo`` (moves to Trash).
     """
     if undo_id is None:
         entry = undo_log.most_recent()

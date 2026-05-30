@@ -7,7 +7,7 @@ Mirrors :mod:`add_todo` but for projects, with two URL-scheme paths:
   endpoint is the only URL-scheme route that creates native section
   headings inside a *new* project (arch doc §5.3).
 
-Undo strategy: soft-delete the created project via
+Undo strategy: cancel the created project via
 ``things:///update-project?id=...&canceled=true&completed=true``. The
 project moves to the Logbook; ``undo`` does not purge it.
 ``update-project`` requires ``THINGS_AUTH_TOKEN``, so undo will raise an

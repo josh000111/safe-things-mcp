@@ -22,7 +22,7 @@ import pytest
 
 from things_mcp import config
 from things_mcp.services import applescript, things_repo
-from things_mcp.services.handlers import hard_delete_todo
+from things_mcp.services.handlers import delete_todo
 from things_mcp.state import undo_log
 import things_mcp.tools.meta as meta_mod
 
@@ -172,7 +172,7 @@ async def test_132_133_hard_delete_and_undo(applescript_on, isolated_state_db):
     print(f"\n  Created: id={todo_id}  title={title!r}  list={todo.get('list')!r}")
 
     # ── 132 step 2: execute hard-delete ────────────────────────────────────
-    result = await hard_delete_todo.execute({"todo_id": todo_id})
+    result = await delete_todo.execute({"todo_id": todo_id})
     print(f"  execute() → {result}")
     assert result["action_kind"] == "delete_todo"
     assert result["id"] == todo_id
@@ -199,7 +199,7 @@ async def test_132_133_hard_delete_and_undo(applescript_on, isolated_state_db):
     print(f"  ✅ Item 132: todo {todo_id!r} found in Things Trash")
 
     # ── 133: undo restores from Trash ──────────────────────────────────────
-    undo_result = await hard_delete_todo.undo(log_entry)
+    undo_result = await delete_todo.undo(log_entry)
     print(f"  undo() → {undo_result}")
     assert undo_result["undone"] is True
     assert undo_result["target_uuid"] == todo_id

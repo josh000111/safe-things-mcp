@@ -36,7 +36,7 @@ from . import (
     complete_todo,
     delete_heading,
     delete_project,
-    hard_delete_todo,
+    delete_todo,
     move_todo,
     prepend_checklist,
     replace_checklist,
@@ -63,7 +63,7 @@ REGISTRY: dict[str, Handler] = {
     complete_todo.KIND: complete_todo,  # type: ignore[dict-item]
     update_todo.KIND: update_todo,  # type: ignore[dict-item]
     move_todo.KIND: move_todo,  # type: ignore[dict-item]
-    hard_delete_todo.KIND: hard_delete_todo,  # type: ignore[dict-item]
+    delete_todo.KIND: delete_todo,  # type: ignore[dict-item]
     add_project.KIND: add_project,  # type: ignore[dict-item]
     cancel_project.KIND: cancel_project,  # type: ignore[dict-item]
     delete_project.KIND: delete_project,  # type: ignore[dict-item]

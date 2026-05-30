@@ -35,7 +35,7 @@ from ..models import (
     ProposeCancelTodoInput,
     ProposeDeleteHeadingInput,
     ProposeDeleteProjectInput,
-    ProposeHardDeleteTodoInput,
+    ProposeDeleteTodoInput,
     ProposeMoveTodoInput,
     ProposeUpdateHeadingInput,
     ProposeUpdateProjectInput,
@@ -169,11 +169,11 @@ async def propose_delete_todo(todo_id: str) -> dict:
             "propose_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
-    payload_model = ProposeHardDeleteTodoInput(todo_id=todo_id)
+    payload_model = ProposeDeleteTodoInput(todo_id=todo_id)
     payload = payload_model.model_dump()
-    preview = handlers.hard_delete_todo.make_preview(payload)
+    preview = handlers.delete_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
-        kind=handlers.hard_delete_todo.KIND, payload=payload, preview=preview
+        kind=handlers.delete_todo.KIND, payload=payload, preview=preview
     )
 
 
@@ -193,7 +193,7 @@ async def propose_add_project(
     native section headings at project birth. Without headings the
     unauthenticated ``add-project`` URL is used.
 
-    Undo soft-deletes the created project (canceled+completed → Logbook).
+    Undo cancels the created project (canceled+completed → Logbook).
     Undo requires ``THINGS_AUTH_TOKEN`` even though execute does not.
     """
     url_scheme.validate_tags(tags)
@@ -400,7 +400,7 @@ async def propose_add_heading(
     in Things as a regular to-do (with underscores). Use
     ``convert_dummy_to_native_heading`` (step 6) to upgrade it later.
 
-    Undo soft-deletes the dummy task. Requires ``THINGS_AUTH_TOKEN`` only
+    Undo cancels the dummy task (moves to Logbook). Requires ``THINGS_AUTH_TOKEN`` only
     for undo.
     """
     payload_model = ProposeAddHeadingInput(

@@ -1,9 +1,9 @@
-"""``delete_heading`` handler — soft-delete a dummy heading.
+"""``delete_heading`` handler — cancel a dummy heading.
 
 Only dummy headings (``__NAME__`` format) can be deleted here. Native
 headings require AppleScript (step 5).
 
-Soft-delete: mark canceled AND completed via the Things URL scheme (same
+Cancel: mark canceled AND completed via the Things URL scheme (same
 approach as ``delete_todo``). The task is preserved in the Logbook, so
 undo can fully restore it.
 
@@ -107,7 +107,7 @@ async def execute(payload: dict) -> dict:
 
 
 async def undo(undo_entry: dict) -> dict:
-    """Restore a soft-deleted dummy heading."""
+    """Restore a cancelled dummy heading."""
     target_uuid = undo_entry.get("target_uuid")
     if not target_uuid:
         raise RuntimeError(

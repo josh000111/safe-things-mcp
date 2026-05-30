@@ -7,8 +7,8 @@ target Today/Anytime/Someday/a project.
 
 Undo strategy: ``things:///update?completed=true&canceled=true``. This
 is a *soft-undo* — the task is marked complete-and-canceled and is no
-longer visible in active lists. A true hard-delete requires AppleScript
-(see ``propose_delete_todo`` in step 4+) and is gated behind a flag.
+longer visible in active lists. To permanently delete a task (move to
+Trash), use ``propose_delete_todo``, which requires AppleScript.
 """
 from __future__ import annotations
 

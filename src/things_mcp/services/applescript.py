@@ -46,7 +46,7 @@ async def run_script(script: str) -> str:
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
             "AppleScript execution is disabled. Set THINGS_MCP_ALLOW_APPLESCRIPT=1 "
-            "to enable hard-delete and other AppleScript-backed operations."
+            "to enable delete-to-Trash and other AppleScript-backed operations."
         )
 
     proc = await asyncio.create_subprocess_exec(
