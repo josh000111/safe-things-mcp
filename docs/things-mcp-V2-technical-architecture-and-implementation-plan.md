@@ -20,7 +20,7 @@ Each phase now tracks two rows: **Build** (automated tests green) and **Manual T
 | V2 step 4 chunk E — `propose_bulk_*` tools (complete/delete/move/update) | ✅ Done | ✅ Verified (Round 4 — same session; 0 blocking bugs) |
 | V2 step 4b — dummy-heading interim layer (URL-scheme only) | ✅ Done | ✅ Verified (Round 5 — 227 tests pass; items 98–122 all pass; see tests/V2-step-4b-verification-2026-05-25.md) |
 | V2 step 5A — opt-in AppleScript foundation + `propose_delete_todo` (hard-delete → Trash); soft-delete removed | ✅ Done (280 tests pass; `applescript.py`, `hard_delete_todo` handler renamed to `propose_delete_todo`, `health()` extended) | ✅ Verified (Round 7 — 2026-05-29; all items 131–135 pass incl. live delete+undo round-trip) |
-| V2 step 5B — reorder todos in lists/projects (with native-heading auto-conversion to dummies at original positions) | ⏳ Not built | ⏳ Manual Testing Session: Not yet run |
+| V2 step 5B — reorder todos in lists/projects (with native-heading auto-conversion to dummies at original positions) | ✅ Done (400 tests pass) | ✅ Verified (Round 10 — 2026-05-30; all items 5B-1 through 5B-7 pass) |
 | V2 step 5C — checklist tools (`get_checklist_items`, append/prepend/replace via URL scheme) | ✅ Done (322→353 tests, +31) | ✅ Verified (Round 9 — 2026-05-30) |
 | V2 step 5D — `propose_cancel_todo` + `propose_bulk_cancel` (renamed from bulk_delete) | ✅ Done (284→325 tests, +41) | n/a — unit tests only |
 | V2 step 5E — `propose_cancel_project` (URL-scheme) + `propose_delete_project` (AppleScript → Trash) | ✅ Done (284→325 tests, +41) | ✅ Verified (Round 8 — 2026-05-30) |
