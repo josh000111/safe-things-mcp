@@ -35,13 +35,39 @@ CREATE INDEX IF NOT EXISTS idx_undo_target_uuid
 
 CREATE INDEX IF NOT EXISTS idx_undo_created_at
     ON undo_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_tag_routing (
+    id            TEXT PRIMARY KEY,
+    tag_name      TEXT NOT NULL,
+    todo_uuid     TEXT NOT NULL,
+    dest_kind     TEXT,
+    dest_uuid     TEXT,
+    transient     INTEGER NOT NULL,
+    created_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_tag_routing_tag_name
+    ON ai_tag_routing(tag_name);
+
+CREATE INDEX IF NOT EXISTS idx_ai_tag_routing_todo_uuid
+    ON ai_tag_routing(todo_uuid);
 """
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply additive schema migrations to an existing DB."""
+    try:
+        conn.execute("ALTER TABLE undo_log ADD COLUMN group_id TEXT")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column name" not in str(exc):
+            raise
 
 
 def init_state_db() -> None:
     ensure_state_dir()
     with connect() as conn:
         conn.executescript(SCHEMA_SQL)
+        _migrate(conn)
         conn.commit()
 
 

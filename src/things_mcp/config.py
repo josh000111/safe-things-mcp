@@ -43,6 +43,7 @@ NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
     "bulk_move",
     "bulk_update",
     "replace_checklist",  # destructive overwrite of entire checklist
+    "delete_ai_tag",    # removes tag from ALL tasks — must always confirm
 })
 
 WRITE_POLL_TIMEOUT_SECONDS = float(
@@ -56,8 +57,10 @@ WRITE_POLL_INTERVAL_SECONDS = float(
 )
 
 PENDING_TTL_SECONDS = 5 * 60
-UNDO_LOG_MAX_ROWS = 200
-UNDO_LOG_MAX_AGE_DAYS = 30
+UNDO_LOG_MAX_ROWS = int(os.environ.get("THINGS_MCP_UNDO_MAX_ROWS", "200"))
+UNDO_LOG_MAX_AGE_DAYS = int(os.environ.get("THINGS_MCP_UNDO_MAX_AGE_DAYS", "7"))
+
+AI_TAG_PARENT = os.environ.get("THINGS_MCP_AI_TAG_PARENT", "AI")
 
 
 def ensure_state_dir() -> None:

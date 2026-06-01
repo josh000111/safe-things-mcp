@@ -296,6 +296,57 @@ class ProposeDeleteProjectInput(BaseModel):
     project_id: str = Field(..., min_length=1)
 
 
+class ProposeCreateAiTagInput(BaseModel):
+    """V2 — propose creating an AI-managed tag.
+
+    The name MUST be asterisk-wrapped: ``*Do Taxes*``. Server enforces
+    this structural invariant. Parent defaults to the configured
+    THINGS_MCP_AI_TAG_PARENT (default "AI").
+    """
+    name: str = Field(..., min_length=3)
+    parent: str = Field(default="AI", min_length=1)
+
+    @model_validator(mode="after")
+    def _require_asterisk_wrapper(self) -> "ProposeCreateAiTagInput":
+        if not (self.name.startswith("*") and self.name.endswith("*") and len(self.name) > 2):
+            raise ValueError(
+                f"AI tag name {self.name!r} must be asterisk-wrapped: e.g. '*Do Taxes*'. "
+                "The asterisks are mandatory structural markers."
+            )
+        return self
+
+
+class ProposeManageAiTagInput(BaseModel):
+    """V2 — propose renaming and/or reparenting an AI tag.
+
+    At least one of new_name / new_parent must be provided.
+    """
+    name: str = Field(..., min_length=1)
+    new_name: str | None = Field(default=None)
+    new_parent: str | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _require_at_least_one_change(self) -> "ProposeManageAiTagInput":
+        if self.new_name is None and self.new_parent is None:
+            raise ValueError(
+                "propose_manage_ai_tag requires at least one of: new_name, new_parent."
+            )
+        if self.new_name is not None:
+            if not (self.new_name.startswith("*") and self.new_name.endswith("*") and len(self.new_name) > 2):
+                raise ValueError(
+                    f"new_name {self.new_name!r} must be asterisk-wrapped: e.g. '*File Taxes*'."
+                )
+        return self
+
+
+class ProposeDeleteAiTagInput(BaseModel):
+    """V2 — propose deleting an AI tag (removes from ALL tasks).
+
+    Always in NEVER_BYPASS_KINDS — explicit confirm required.
+    """
+    name: str = Field(..., min_length=1)
+
+
 class HealthReport(BaseModel):
     things_db_path: str
     things_db_exists: bool

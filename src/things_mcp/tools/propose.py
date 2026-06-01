@@ -33,9 +33,12 @@ from ..models import (
     ProposeBulkUpdateInput,
     ProposeCancelProjectInput,
     ProposeCancelTodoInput,
+    ProposeCreateAiTagInput,
+    ProposeDeleteAiTagInput,
     ProposeDeleteHeadingInput,
     ProposeDeleteProjectInput,
     ProposeDeleteTodoInput,
+    ProposeManageAiTagInput,
     ProposeMoveTodoInput,
     ProposeUpdateHeadingInput,
     ProposeUpdateProjectInput,
@@ -575,6 +578,76 @@ async def propose_replace_checklist(todo_id: str, items: list[str]) -> dict:
     )
 
 
+# ---------- AI tag tools ----------
+
+
+async def propose_create_ai_tag(name: str, parent: str = "AI") -> dict:
+    """Propose creating an AI-managed tag under the AI parent folder.
+
+    The name MUST be asterisk-wrapped (e.g. '*Do Taxes*'). Server
+    enforces this structural invariant. If the tag already exists,
+    this is a no-op.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_create_ai_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+        )
+    payload_model = ProposeCreateAiTagInput(name=name, parent=parent)
+    payload = payload_model.model_dump()
+    preview = handlers.create_ai_tag.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.create_ai_tag.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_manage_ai_tag(
+    name: str,
+    new_name: str | None = None,
+    new_parent: str | None = None,
+) -> dict:
+    """Propose renaming and/or reparenting an AI tag.
+
+    At least one of new_name / new_parent is required. new_name must
+    also be asterisk-wrapped.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_manage_ai_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+        )
+    payload_model = ProposeManageAiTagInput(
+        name=name, new_name=new_name, new_parent=new_parent
+    )
+    payload = payload_model.model_dump(exclude_none=True)
+    preview = handlers.manage_ai_tag.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.manage_ai_tag.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_delete_ai_tag(name: str) -> dict:
+    """Propose deleting an AI tag — removes it from ALL tasks that carry it.
+
+    This is a NEVER_BYPASS kind — explicit confirm_action() required
+    even with THINGS_MCP_AUTO_CONFIRM=1.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_delete_ai_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+        )
+    payload_model = ProposeDeleteAiTagInput(name=name)
+    payload = payload_model.model_dump()
+    preview = handlers.delete_ai_tag.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.delete_ai_tag.KIND, payload=payload, preview=preview
+    )
+
+
 # ---------- shared helper ----------
 
 
@@ -650,3 +723,6 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_prepend_checklist_items)
     mcp.tool()(propose_replace_checklist)
     mcp.tool()(propose_reorder_todos)
+    mcp.tool()(propose_create_ai_tag)
+    mcp.tool()(propose_manage_ai_tag)
+    mcp.tool()(propose_delete_ai_tag)

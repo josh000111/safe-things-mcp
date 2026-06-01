@@ -19,6 +19,7 @@ def record(
     target_uuid: str | None,
     before_state: dict[str, Any] | None,
     after_state: dict[str, Any] | None,
+    group_id: str | None = None,
 ) -> str:
     entry_id = str(_uuid.uuid4())
     created = _now()
@@ -26,7 +27,7 @@ def record(
     with connect() as conn:
         conn.execute(
             "INSERT INTO undo_log (id, action_kind, target_uuid, before_state_json, "
-            "after_state_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "after_state_json, created_at, expires_at, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 entry_id,
                 action_kind,
@@ -35,6 +36,7 @@ def record(
                 json.dumps(after_state) if after_state is not None else None,
                 created.isoformat(),
                 expires.isoformat(),
+                group_id,
             ),
         )
         _trim(conn)
@@ -87,7 +89,7 @@ def most_recent() -> dict[str, Any] | None:
 def recent(limit: int = 20) -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT id, action_kind, target_uuid, created_at, expires_at "
+            "SELECT id, action_kind, target_uuid, created_at, expires_at, group_id "
             "FROM undo_log ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -116,6 +118,7 @@ def get(entry_id: str) -> dict[str, Any] | None:
         "after_state": json.loads(row["after_state_json"]) if row["after_state_json"] else None,
         "created_at": row["created_at"],
         "expires_at": row["expires_at"],
+        "group_id": row["group_id"] if "group_id" in row.keys() else None,
     }
 
 
