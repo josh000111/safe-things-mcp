@@ -33,5 +33,32 @@ async def undo(undo_id: str | None = None) -> dict:
     return await handler.undo(entry)
 
 
+async def undo_group(group_id: str) -> dict:
+    """Reverse ALL actions in a sort group in correct reverse order (LIFO).
+
+    A sort produces multiple undo_log entries (apply_ai_tags → bulk_move →
+    cleanup_ai_tags) that share a ``group_id``. This tool reverses them all
+    newest-first so the whole sort unwinds cleanly — even if unrelated actions
+    happened in between.
+
+    Use the ``group_id`` returned by ``propose_apply_ai_tags`` (or any handler
+    in the sort). Returns a list of undo results, one per reversed entry.
+    """
+    entries = undo_log.get_by_group_id(group_id)
+    if not entries:
+        raise ValueError(f"No undo_log entries found for group_id={group_id!r}.")
+    results = []
+    for entry in entries:
+        handler = handlers.get(entry["action_kind"])
+        result = await handler.undo(entry)
+        results.append(result)
+    return {
+        "undone_group": group_id,
+        "count": len(results),
+        "results": results,
+    }
+
+
 def register(mcp: FastMCP) -> None:
     mcp.tool()(undo)
+    mcp.tool()(undo_group)

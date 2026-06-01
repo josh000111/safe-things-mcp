@@ -27,12 +27,14 @@ from . import (
     add_project,
     add_todo,
     append_checklist,
+    apply_ai_tags,
     bulk_complete,
     bulk_delete,
     bulk_move,
     bulk_update,
     cancel_project,
     cancel_todo,
+    cleanup_ai_tags,
     complete_todo,
     create_ai_tag,
     delete_ai_tag,
@@ -85,6 +87,8 @@ REGISTRY: dict[str, Handler] = {
     create_ai_tag.KIND: create_ai_tag,  # type: ignore[dict-item]
     manage_ai_tag.KIND: manage_ai_tag,  # type: ignore[dict-item]
     delete_ai_tag.KIND: delete_ai_tag,  # type: ignore[dict-item]
+    apply_ai_tags.KIND: apply_ai_tags,  # type: ignore[dict-item]
+    cleanup_ai_tags.KIND: cleanup_ai_tags,  # type: ignore[dict-item]
 }
 
 

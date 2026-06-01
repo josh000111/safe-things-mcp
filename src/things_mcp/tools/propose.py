@@ -26,6 +26,7 @@ from ..models import (
     ProposeAddHeadingInput,
     ProposeAddProjectInput,
     ProposeAddTodoInput,
+    ProposeApplyAiTagsInput,
     ProposeBulkCancelInput,
     ProposeBulkCompleteInput,
     ProposeBulkDeleteInput,
@@ -33,6 +34,7 @@ from ..models import (
     ProposeBulkUpdateInput,
     ProposeCancelProjectInput,
     ProposeCancelTodoInput,
+    ProposeCleanupAiTagsInput,
     ProposeCreateAiTagInput,
     ProposeDeleteAiTagInput,
     ProposeDeleteHeadingInput,
@@ -648,6 +650,80 @@ async def propose_delete_ai_tag(name: str) -> dict:
     )
 
 
+async def propose_apply_ai_tags(
+    items: list[dict],
+    group_id: str | None = None,
+) -> dict:
+    """Propose applying AI tags to one or more to-dos.
+
+    MERGE MODEL: new tag set = existing tags ∪ add_tags. Never clobbers
+    user tags. Undo restores the EXACT prior tag set.
+
+    Each item in ``items`` must have:
+    - ``todo_uuid`` — the to-do's UUID
+    - ``add_tags`` — list of asterisk-wrapped AI tag names (e.g. ``["*Do Taxes*"]``)
+    - ``routing`` (optional) — ``{dest_kind, dest_uuid, transient}`` if this
+      tag encodes a proposed sort destination. Set ``transient=true`` for
+      routing tags that should be auto-cleaned after the move. Leave ``null``
+      for persistent semantic tags (``*Unclear*``, ``*Ambiguous Home*``, etc.).
+
+    EXISTING-LIST MATCHING (G6): Before calling this tool, read existing
+    projects/areas via ``get_projects``/``get_areas`` and prefer existing
+    destinations. Only propose a new list where nothing fits, and only with
+    explicit user approval. When a destination name is ambiguous (duplicate
+    names), show context: "Shopping — in Area 'Home'" or "Shopping — a
+    standalone project (not in any Area)".
+
+    ABSTAIN RULE: When confidence < 90% or criteria are ambiguous, apply
+    ``*Unclear*`` (transient=false) rather than guessing. One unclear task
+    never blocks the rest of the batch.
+
+    Pass ``group_id`` (a shared UUID) to link all undo_log entries from one
+    sort (apply_ai_tags → bulk_move → cleanup_ai_tags) so ``undo_group`` can
+    reverse the whole sort atomically.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_apply_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+        )
+    payload_model = ProposeApplyAiTagsInput(items=items, group_id=group_id)
+    payload = payload_model.model_dump()
+    preview = handlers.apply_ai_tags.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.apply_ai_tags.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_cleanup_ai_tags(
+    todo_uuids: list[str],
+    group_id: str | None = None,
+) -> dict:
+    """Propose removing transient AI routing tags from to-dos after a confirmed sort.
+
+    Strips ONLY ``transient=1`` routing tags recorded in ``ai_tag_routing``.
+    NEVER strips ``*Unclear*`` or other persistent abstain tags (those have
+    ``transient=0`` and are not touched by cleanup).
+
+    Call this AFTER ``bulk_move`` has confirmed the tasks landed in their new
+    destinations. Pass the same ``group_id`` used in ``propose_apply_ai_tags``
+    and ``propose_bulk_move`` to keep the undo group linked.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_cleanup_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+        )
+    payload_model = ProposeCleanupAiTagsInput(todo_uuids=todo_uuids, group_id=group_id)
+    payload = payload_model.model_dump()
+    preview = handlers.cleanup_ai_tags.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.cleanup_ai_tags.KIND, payload=payload, preview=preview
+    )
+
+
 # ---------- shared helper ----------
 
 
@@ -726,3 +802,5 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_create_ai_tag)
     mcp.tool()(propose_manage_ai_tag)
     mcp.tool()(propose_delete_ai_tag)
+    mcp.tool()(propose_apply_ai_tags)
+    mcp.tool()(propose_cleanup_ai_tags)

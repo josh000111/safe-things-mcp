@@ -101,3 +101,94 @@ def register(mcp: FastMCP) -> None:
         — use ``propose_append/prepend/replace_checklist`` to modify the list.
         """
         return things_repo.get_checklist_items(todo_id)
+
+    @mcp.tool()
+    def list_ai_tags() -> dict:
+        """List all AI-managed tags under the AI parent, with their tasks and routing info.
+
+        Returns the AI parent tag, its children (AI tags), and for each tag:
+        the tasks carrying it plus any proposed sort destinations from
+        ai_tag_routing. Powers the review phase of the tag-first→review→move
+        workflow.
+
+        Disambiguating context for destinations: projects in an Area show as
+        "Name — in Area 'AreaName'"; standalone projects (not in any Area)
+        show as "Name — a standalone project (not in any Area)".
+        """
+        from ..state import ai_tag_routing as atr
+        from ..config import AI_TAG_PARENT
+
+        # Get all tags with items
+        all_tags = things_repo.tags(include_items=True)
+
+        # Find the AI parent tag
+        ai_parent = next((t for t in all_tags if t.get("title") == AI_TAG_PARENT), None)
+
+        # Get all areas and projects for disambiguation
+        all_areas = things_repo.areas()
+        all_projects = things_repo.projects()
+
+        area_by_id = {a["uuid"]: a for a in all_areas}
+
+        def dest_label(dest_kind: str | None, dest_uuid: str | None) -> str | None:
+            if not dest_kind or not dest_uuid:
+                return None
+            if dest_kind == "area":
+                a = area_by_id.get(dest_uuid)
+                return f"{a['title']} (area)" if a else f"Area {dest_uuid}"
+            if dest_kind == "project":
+                proj = next((p for p in all_projects if p["uuid"] == dest_uuid), None)
+                if proj:
+                    area_id = proj.get("area") or proj.get("area_id")
+                    if area_id and area_id in area_by_id:
+                        area_name = area_by_id[area_id]["title"]
+                        return f"{proj['title']} — in Area '{area_name}'"
+                    return f"{proj['title']} — a standalone project (not in any Area)"
+                return f"Project {dest_uuid}"
+            return f"{dest_kind} {dest_uuid}"
+
+        # Collect AI child tags
+        ai_children: list[dict] = []
+        if ai_parent:
+            for tag in all_tags:
+                parent = tag.get("parent_title") or tag.get("parent")
+                if parent != AI_TAG_PARENT:
+                    continue
+                title = tag.get("title", "")
+                # Get tasks carrying this tag
+                tasks = tag.get("items") or []
+                task_summaries = [
+                    {"uuid": t.get("uuid"), "title": t.get("title"), "status": t.get("status")}
+                    for t in tasks if isinstance(t, dict)
+                ]
+                # Get routing rows for tasks carrying this tag
+                task_uuids = [t["uuid"] for t in task_summaries if t.get("uuid")]
+                routing_rows = []
+                if task_uuids:
+                    for task_uuid in task_uuids:
+                        rows = atr.get_for_todo(task_uuid)
+                        for row in rows:
+                            if row.get("tag_name") == title:
+                                routing_rows.append({
+                                    "todo_uuid": task_uuid,
+                                    "dest_kind": row.get("dest_kind"),
+                                    "dest_uuid": row.get("dest_uuid"),
+                                    "transient": bool(row.get("transient")),
+                                    "dest_label": dest_label(
+                                        row.get("dest_kind"), row.get("dest_uuid")
+                                    ),
+                                })
+                ai_children.append({
+                    "name": title,
+                    "transient": any(r["transient"] for r in routing_rows) if routing_rows else False,
+                    "task_count": len(task_summaries),
+                    "tasks": task_summaries,
+                    "routing": routing_rows,
+                })
+
+        return {
+            "ai_parent": AI_TAG_PARENT,
+            "ai_parent_found": ai_parent is not None,
+            "ai_tags": ai_children,
+            "total_tags": len(ai_children),
+        }

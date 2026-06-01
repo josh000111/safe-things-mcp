@@ -347,6 +347,32 @@ class ProposeDeleteAiTagInput(BaseModel):
     name: str = Field(..., min_length=1)
 
 
+class AiTagRoutingInput(BaseModel):
+    """Routing metadata for a single AI tag application."""
+    dest_kind: str | None = Field(default=None)
+    dest_uuid: str | None = Field(default=None)
+    transient: bool = Field(default=False)
+
+
+class AiTagItemInput(BaseModel):
+    """Single item in an apply_ai_tags batch."""
+    todo_uuid: str = Field(..., min_length=1)
+    add_tags: list[str] = Field(..., min_length=1)
+    routing: AiTagRoutingInput | None = Field(default=None)
+
+
+class ProposeApplyAiTagsInput(BaseModel):
+    """V2 — propose applying AI tags to one or more to-dos."""
+    items: list[AiTagItemInput] = Field(..., min_length=1)
+    group_id: str | None = Field(default=None)
+
+
+class ProposeCleanupAiTagsInput(BaseModel):
+    """V2 — propose cleaning up transient AI routing tags after a confirmed sort."""
+    todo_uuids: list[str] = Field(..., min_length=1)
+    group_id: str | None = Field(default=None)
+
+
 class HealthReport(BaseModel):
     things_db_path: str
     things_db_exists: bool

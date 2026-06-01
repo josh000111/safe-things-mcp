@@ -105,6 +105,16 @@ def list() -> list[dict[str, Any]]:
     return [{"id": r["id"]} for r in rows]
 
 
+def get_by_group_id(group_id: str) -> list[dict[str, Any]]:
+    """Return all entries in a group, ordered newest-first (LIFO for undo)."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id FROM undo_log WHERE group_id = ? ORDER BY created_at DESC",
+            (group_id,),
+        ).fetchall()
+    return [get(r["id"]) for r in rows if get(r["id"]) is not None]
+
+
 def get(entry_id: str) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute("SELECT * FROM undo_log WHERE id = ?", (entry_id,)).fetchone()
