@@ -1,20 +1,44 @@
 # things-mcp
 
-Local [Model Context Protocol](https://modelcontextprotocol.io) server for
-[Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any
-MCP-capable agent (Claude Desktop, Claude Code, Codex, Cursor, …) read and
-write your entire Things database — tasks, projects, headings, checklists, and
-more.
+Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude Desktop, Claude Code, Cursor, Codex, and others) read and write your entire Things database -- tasks, projects, headings, checklists, tags, and more.
 
-> **V2 complete.** Reads are full-coverage. V2 full write parity has shipped,
-> with propose/confirm + undo protecting all mutating operations.
+> **V2 complete.** Full read coverage plus full write parity: propose/confirm safety on every mutation, a complete undo system, bulk operations, and an AI-assisted tagging and sorting workflow.
+
+---
+
+## What sets this apart
+
+Most Things MCP servers offer basic reads and direct URL-scheme writes. This one goes further in ways that matter when an AI agent has write access to your task list.
+
+| Feature | this repo | [hald/things-mcp](https://github.com/hald/things-mcp) | [soycanopa/SupaThings-MCP](https://github.com/soycanopa/SupaThings-MCP) | [drjforrest/mcp-things3](https://github.com/drjforrest/mcp-things3) |
+|---|:---:|:---:|:---:|:---:|
+| Propose/confirm safety layer | yes | no | no | no |
+| Full undo (including group undo) | yes | no | no | no |
+| AI-assisted tagging + sort workflow | yes | no | no | no |
+| Bulk operations (complete, cancel, move, update) | yes | no | no | no |
+| Checklist management | yes | partial | no | no |
+| Project heading management | yes | no | no | no |
+| Reorder to-dos | yes | no | no | no |
+| Delete to Trash (not just cancel) | yes | yes | partial | no |
+| Signed binary build (persistent permission grant) | yes | no | no | no |
+| Total tools | 52 | ~25 | 37 | ~10 |
+
+**Propose/confirm** -- every write previews what will change before anything is executed. You see what the agent is about to do and approve or reject it. Destructive and bulk operations can never be auto-confirmed.
+
+**Undo** -- every confirmed action logs its inverse before mutating. Call `undo()` to reverse the last action. Call `undo_group(group_id)` to reverse an entire multi-step sort atomically in the correct reverse order.
+
+**AI tagging** -- a full tagging and sorting workflow where the agent flags uncertain tasks rather than guessing. Ambiguous tasks get a `*Unclear*` tag instead of a potentially wrong destination. The flag persists until you resolve it.
+
+---
 
 ## Requirements
 
 - macOS with Things 3 installed and running
 - Python 3.11+
 - [`uv`](https://github.com/astral-sh/uv) (recommended) or `pip`
-- Things URL scheme enabled: **Things → Settings → General → Enable Things URLs**
+- Things URL scheme enabled: **Things > Settings > General > Enable Things URLs**
+
+---
 
 ## Install
 
@@ -25,112 +49,71 @@ uv venv --python /opt/homebrew/bin/python3
 uv sync
 ```
 
-Sanity check (verifies dependencies installed):
+Verify the install:
 
 ```bash
 .venv/bin/things-mcp --help
 ```
 
-There are **two ways to run the server** — see
-[Two ways to run it](#two-ways-to-run-it-auto-updates-vs-a-cleaner-permission-prompt)
-for the full trade-off:
+There are two ways to run the server. See [Two ways to run it](#two-ways-to-run-it) for the full comparison.
 
-- **Want effortless updates?** Use the `uvx` method (Option A) — you can skip the
-  build below and point your client straight at the repo.
-- **Want the cleanest macOS permission prompt?** Build the signed bundle (Option B):
+- **Want effortless updates?** Use Option A (`uvx`) -- you can skip the build step and point your client straight at the repo.
+- **Want a persistent macOS permission grant?** Build the signed bundle (Option B):
 
 ```bash
 ./build_tools/build_signed.sh
 ```
 
-This produces a self-contained program at `dist_signed/things-mcp/things-mcp` and
-prints a ready-to-paste client config block. Point your client's `command` at
-that program (see [Client config](#client-config)).
+This produces a self-contained signed binary at `dist_signed/things-mcp/things-mcp` and prints a ready-to-paste client config block.
+
+---
 
 ## First-run setup
 
-Read tools work immediately with no configuration. Steps 1–2 below are only
-needed for mutating tools (any `propose_*` tool or direct write other than
-`add_inbox_todo`).
+Read tools work immediately with no configuration. The steps below are only needed for write operations (any `propose_*` tool or direct write other than `add_inbox_todo`).
 
-1. Things → Settings → General → **Enable Things URLs** (toggle on if not already).
-2. Click **Manage**, copy the token.
+1. Things > Settings > General > **Enable Things URLs** (toggle on if not already).
+2. Click **Manage**, copy the auth token.
 3. Add it to your MCP client's env block as `THINGS_AUTH_TOKEN`.
-4. If you want delete and other advanced operations, also add
-   `THINGS_MCP_ALLOW_APPLESCRIPT=1` to the same env block.
+4. For delete, reorder, and AI tagging operations, also add `THINGS_MCP_ALLOW_APPLESCRIPT=1` to the same env block.
 5. Restart the client.
 
-Verify with: ask the agent *"call health()"* → `url_scheme_auth_token_set: true`.
+Verify: ask the agent *"call health()"* and confirm `url_scheme_auth_token_set: true`.
 
-### macOS Permission Prompts
+<details>
+<summary><strong>macOS permission prompts -- what to expect</strong></summary>
 
-things-mcp triggers two distinct macOS permission dialogs.
+things-mcp triggers two macOS permission dialogs.
 
-**1. "python … would like to access data from other apps"** — the recurring one
+**1. "python would like to access data from other apps"**
 
-things-mcp reads the Things 3 database directly from Things' protected
-app-container folder, so macOS (TCC) asks for consent before another app's data
-can be read.
+things-mcp reads the Things 3 database directly from Things' protected app-container folder. macOS (TCC) asks for consent before another app's data can be read.
 
-macOS only **remembers** that consent for a program with a *stable, signed
-identity*. When the server runs on a plain Python interpreter, macOS sees an
-ad-hoc (effectively anonymous) program with no durable identity, so it cannot
-record the grant — and re-prompts on **every launch** (and again when the client
-spawns the server mid-session). This is not specific to this project; it affects
-every Things MCP that reads the database through an unsigned interpreter.
+macOS only remembers that consent for a program with a stable, signed identity. When the server runs on a plain Python interpreter, macOS sees an anonymous program and re-prompts on essentially every launch. This affects every Things MCP server that reads the database through an unsigned interpreter -- it is not specific to this project.
 
-**The fix: run a signed standalone build.** `build_tools/build_signed.sh` freezes
-the server into a single binary and signs it with a stable, reused certificate,
-giving macOS an identity it can remember:
+**The fix: use the signed bundle (Option B).** `build_tools/build_signed.sh` freezes the server into a signed binary, giving macOS an identity it can remember. On clients that launch the server directly (Cursor, VS Code, Claude Code), you get one prompt and then it stops.
 
-```bash
-./build_tools/build_signed.sh
-```
-
-Then point your MCP client's `command` at the printed path
-(`dist_signed/things-mcp/things-mcp`) instead of `.venv/bin/things-mcp`. You'll
-get **one** "things-mcp would like to access data from other apps" prompt — click
-Allow — and on a **direct-launch client it should not return.** (If it does still
-recur there, run the one-time `add-trusted-cert` command the script prints.)
-
-> #### ⚠️ Claude Desktop is the exception
+> **Claude Desktop is the exception.** Claude Desktop wraps MCP servers in a helper process (`Claude.app/Contents/Helpers/disclaimer`), which prevents macOS from recording the permission grant for the actual server binary. The prompt recurs on every launch regardless of signing. This is an upstream Claude Desktop bug ([anthropics/claude-code#36832](https://github.com/anthropics/claude-code/issues/36832)).
 >
-> Claude Desktop does **not** launch MCP servers directly — it wraps them in a
-> middleman helper (`Claude.app/Contents/Helpers/disclaimer`). macOS records the
-> permission against the middleman, not your server, and then forgets it — so on
-> Claude Desktop **the prompt recurs on every launch no matter how the server is
-> signed.** We verified this empirically (ad-hoc, self-signed, and self-signed +
-> system-trusted binaries all re-prompt identically). It is an upstream Claude
-> Desktop bug: [anthropics/claude-code#36832](https://github.com/anthropics/claude-code/issues/36832).
->
-> On Claude Desktop your only options today are:
-> - **Use a direct-launch client** for a prompt-free experience (Cursor, VS Code,
->   Codex, Claude Code CLI) with the signed build above, **or**
-> - **Grant Full Disk Access to Claude** (System Settings → Privacy & Security →
->   Full Disk Access → add `/Applications/Claude.app`). This persists because it
->   attaches to Claude itself, not the middleman. **Caveat — this is broad:** it
->   removes the OS file-access guardrail for *everything* Claude runs (every MCP
->   server and agent action), so opt in only if you accept that trade-off. It does
->   **not** bypass Claude's own per-tool approval prompts — only the OS-level
->   file check, **or**
-> - **Wait** for the upstream fix and live with the prompt in the meantime.
+> On Claude Desktop your options are:
+> - Use a direct-launch client (Cursor, VS Code, Claude Code) with the signed build for a prompt-free experience, **or**
+> - Grant Full Disk Access to Claude (System Settings > Privacy & Security > Full Disk Access > add `/Applications/Claude.app`). This persists because it attaches to the Claude app itself. Note: this is a broad grant -- it removes the OS file-access guardrail for everything Claude runs (every MCP server and agent action). It does not bypass Claude's own per-tool approval prompts. **or**
+> - Live with the prompt for now and wait for the upstream fix.
 
 **2. "things-mcp wants to control Things 3"**
 
-Appears the first time an AppleScript-backed operation runs (requires
-`THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow**. This Automation grant is
-one-time and persists.
+Appears the first time an AppleScript-backed operation runs (requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow** once. This Automation grant persists.
 
-## Two ways to run it: auto-updates vs. a cleaner permission prompt
+</details>
 
-There are two ways to run things-mcp, and they trade off **easy updates**
-against **the macOS permission-prompt experience**. Pick what matters more to
-you. (Note: `npx` is for Node packages — this server is Python, so the
-auto-update runner is **`uvx`**, not npx.)
+---
 
-### Option A — `uvx` (easiest updates)
+## Two ways to run it
 
-Point your client straight at the repo; uv fetches, builds, and runs it:
+<details>
+<summary><strong>Option A -- uvx (easiest updates)</strong></summary>
+
+Point your client straight at the repo. uv fetches, builds, and runs the server automatically.
 
 ```json
 {
@@ -138,232 +121,52 @@ Point your client straight at the repo; uv fetches, builds, and runs it:
     "things-mcp": {
       "command": "uvx",
       "args": ["--from", "git+https://github.com/josh000111/things-mcp", "things-mcp"],
-      "env": { "THINGS_AUTH_TOKEN": "paste-token-here", "THINGS_MCP_ALLOW_APPLESCRIPT": "1" }
+      "env": {
+        "THINGS_AUTH_TOKEN": "paste-token-here",
+        "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
+      }
     }
   }
 }
 ```
 
-- **Updates:** trivial. Add `"--refresh"` to `args` to pull the latest on every
-  launch (costs a few seconds of network at startup); without it, uv reuses the
-  cached copy until you refresh. No manual build, ever.
-- **Permission prompt:** shows **“python3.11”** (the interpreter, not us). Because
-  a bare interpreter has no stable signed identity, macOS **re-prompts on
-  essentially every launch, on every client.**
+Add `"--refresh"` to `args` to pull the latest on every launch (costs a few seconds of network at startup).
 
-### Option B — signed bundle (cleanest prompt)
+**Trade-off:** the permission prompt shows "python3.11" (the interpreter) and recurs on every launch on every client. Updates are trivial.
 
-Build the single signed program (see [Install](#install)) and point your client
-at `…/dist_signed/things-mcp/things-mcp`.
+</details>
 
-- **Updates:** manual — `git pull && uv sync && ./build_tools/build_signed.sh`,
-  then restart the client.
-- **Permission prompt:** shows **“things-mcp”**, and on clients that launch it
-  directly the approval is **remembered (one prompt, then never again).**
+<details>
+<summary><strong>Option B -- signed bundle (persistent permission grant)</strong></summary>
 
-### What the permission prompt does, by client
+Build the signed binary once:
 
-| Client | Option A — `uvx` | Option B — signed bundle |
+```bash
+./build_tools/build_signed.sh
+```
+
+Then point your client's `command` at the printed path (`dist_signed/things-mcp/things-mcp`).
+
+**Trade-off:** updates require `git pull && uv sync && ./build_tools/build_signed.sh` followed by a client restart. The permission prompt shows "things-mcp" and on direct-launch clients (Cursor, VS Code, Claude Code) it is remembered after one approval.
+
+</details>
+
+| Client | Option A -- uvx | Option B -- signed bundle |
 |---|---|---|
-| **Claude Desktop** | “python3.11”, **every launch** (~2× per session) | “things-mcp”, **every launch** (~2× per session) |
-| **Cursor / VS Code / Codex** | “python3.11”, **recurs** | “things-mcp”, **once, then remembered**\* |
-| Effort to update | trivial / auto | manual rebuild |
+| **Claude Desktop** | "python3.11", every launch | "things-mcp", every launch (upstream bug) |
+| **Cursor / VS Code / Claude Code** | "python3.11", recurs | "things-mcp", once then remembered |
+| Updates | trivial / auto | manual rebuild |
 
-\* Expected — this is the whole point of signing — but verify on first use. If it
-still recurs on a direct-launch client, run the one-time `trust` command the
-build script prints.
+**Rule of thumb:** primarily on Claude Desktop and want effortless updates -- Option A (the prompt recurs either way there, so you give up little). On Cursor, VS Code, or Claude Code and want the prompt to stop -- Option B.
 
-**Why Claude Desktop always re-prompts (either option):** it launches MCP servers
-through a helper (`Claude.app/Contents/Helpers/disclaimer`) that stops macOS from
-remembering the grant for *any* add-on, regardless of signing — upstream bug
-[anthropics/claude-code#36832](https://github.com/anthropics/claude-code/issues/36832).
-The only way to stop the prompt there is **Full Disk Access on Claude itself**,
-which is broad (see [macOS Permission Prompts](#macos-permission-prompts)). The
-other clients have no such helper, which is why signing works for them.
-
-**Rule of thumb:** mostly on **Claude Desktop** and want effortless updates →
-**Option A** (the prompt recurs there either way, so you give up little). On
-**Cursor / VS Code / Codex** and want the prompt to stop after the first
-approval → **Option B**.
-
-## Tools
-
-### Read (no auth needed)
-
-| Tool | What it does |
-| --- | --- |
-| `list_inbox` | All to-dos in your Inbox |
-| `list_today` | To-dos scheduled for Today |
-| `list_upcoming` | Upcoming scheduled to-dos (default: next 7 days) |
-| `list_anytime` | To-dos in the Anytime list |
-| `list_someday` | To-dos in the Someday list |
-| `list_logbook` | Recently completed to-dos (default: last 7 days) |
-| `list_trash` | Items currently in the Things Trash |
-| `get_areas` | All top-level Areas |
-| `get_projects` | All projects, optionally filtered by Area |
-| `get_project` | A single project with its to-dos and headings |
-| `get_todo` | A single to-do including checklist items and tags |
-| `get_tags` | All tags |
-| `get_checklist_items` | Checklist items for a to-do, with completion state |
-| `search` | Full-text search across titles and notes |
-
-### Direct writes (no propose/confirm)
-
-These execute immediately without a confirmation step. Require `THINGS_AUTH_TOKEN`
-except `add_inbox_todo`. All except `add_inbox_todo` are undoable via `undo`.
-
-| Tool | What it does |
-| --- | --- |
-| `add_inbox_todo` | Create a new to-do in the Inbox (no auth token needed) |
-| `add_today_todo` | Create a new to-do scheduled for Today |
-| `add_anytime_todo` | Create a new to-do in Anytime |
-| `add_someday_todo` | Create a new to-do in Someday |
-| `complete_todo` | Mark a to-do as done — moves it to the Logbook |
-
-### Propose/confirm writes
-
-All require `THINGS_AUTH_TOKEN` unless noted. Each `propose_*` call returns a
-preview for the user to approve before anything is written. See
-**Propose/confirm flow** below.
-
-> **Complete vs Cancel vs Delete**
-> - **Complete** — marks a task done. Moves to the Things **Logbook**.
-> - **Cancel** — marks a task as not happening. Also moves to the **Logbook**.
-> - **Delete** — moves a task or project to Things **Trash**. Trash
->   auto-empties after 30 days. Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`.
->
-> Use Cancel when something won't be done but you want to keep a record.
-> Use Delete when you want it gone.
-
-**To-do ops**
-
-| Tool | What it does |
-| --- | --- |
-| `propose_add_todo` | Add a to-do to any list or project |
-| `propose_update_todo` | Edit a to-do's title, notes, dates, tags, or status |
-| `propose_move_todo` | Move a to-do to a different list or project |
-| `propose_cancel_todo` | Cancel a to-do — moves it to the Logbook |
-| `propose_delete_todo`† | Delete a to-do — moves it to Things Trash |
-
-**Project ops**
-
-| Tool | What it does |
-| --- | --- |
-| `propose_add_project` | Create a new project, optionally with headings |
-| `propose_update_project` | Edit a project's title, notes, dates, or tags |
-| `propose_cancel_project` | Cancel a project — moves it to the Logbook |
-| `propose_delete_project`† | Delete a project and all its tasks — moves to Trash |
-
-**Heading ops** (dummy headings — see Architecture)
-
-| Tool | What it does |
-| --- | --- |
-| `propose_add_heading` | Add a section heading to a project |
-| `propose_update_heading` | Rename a heading |
-| `propose_delete_heading` | Remove a heading (cancels the underlying task) |
-
-**Checklist ops**
-
-| Tool | What it does |
-| --- | --- |
-| `propose_append_checklist_items` | Add items to the end of a to-do's checklist |
-| `propose_prepend_checklist_items` | Add items to the top of a to-do's checklist |
-| `propose_replace_checklist` | Replace the entire checklist (always needs explicit confirm) |
-
-**Bulk ops** (always require explicit confirm regardless of `THINGS_MCP_AUTO_CONFIRM`)
-
-| Tool | What it does |
-| --- | --- |
-| `propose_bulk_complete` | Mark multiple to-dos done in one operation |
-| `propose_bulk_cancel` | Cancel multiple to-dos in one operation |
-| `propose_bulk_move` | Move multiple to-dos to a different list or project |
-| `propose_bulk_update` | Edit fields across multiple to-dos at once |
-
-**Advanced ops** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1`)
-
-Uses AppleScript for operations the Things URL scheme cannot perform.
-
-| Tool | What it does |
-| --- | --- |
-| `propose_delete_todo`† | Delete a to-do — moves to Things Trash |
-| `propose_delete_project`† | Delete a project — moves to Things Trash |
-
-† Moves to Things Trash via AppleScript; requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`.
-
-AI tagging operations also require `THINGS_MCP_ALLOW_APPLESCRIPT=1` — see
-[AI Tagging](#ai-tagging) below.
-
-**AI tagging ops** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1`)
-
-AI-created tags are asterisk-wrapped (`*Do Taxes*`) and grouped under an
-`AI` parent folder in the Things Tags window. See [AI Tagging](#ai-tagging)
-for the full workflow.
-
-| Tool | What it does |
-| --- | --- |
-| `list_ai_tags` | List all AI-managed tags with their tasks and proposed routing destinations |
-| `propose_create_ai_tag` | Create an AI tag under the `AI` parent (`*TagName*` format) |
-| `propose_apply_ai_tags` | Apply AI tags to tasks (merge model — never clobbers user tags) |
-| `propose_cleanup_ai_tags` | Strip transient routing tags after a confirmed sort |
-| `propose_manage_ai_tag` | Rename or reparent an AI tag |
-| `propose_delete_ai_tag`† | Delete an AI tag — removes it from all tasks that carry it |
-| `undo_group` | Reverse an entire multi-step sort atomically (apply → move → cleanup) |
-
-† Always requires explicit `confirm_action()` — never auto-confirmed.
-
-### Propose/confirm controls
-
-| Tool | What it does |
-| --- | --- |
-| `confirm_action` | Execute a pending proposed action |
-| `cancel_action` | Discard a pending proposed action |
-| `list_pending_actions` | Show all actions waiting for confirmation |
-
-### Undo
-
-| Tool | What it does |
-| --- | --- |
-| `undo` | Reverse the most recent action (or a specific one by ID) |
-
-### Meta
-
-| Tool | What it does |
-| --- | --- |
-| `health` | Server status: DB path, Things running, auth token set, AppleScript state |
-| `recent_undo_log` | List of recent reversible actions |
-
-## Propose/confirm flow
-
-Most mutating tools use a two-phase pattern:
-
-1. Call a `propose_*` tool. It returns a human-readable preview and an
-   `action_id` — nothing is written yet.
-2. Surface the preview to the user and wait for approval.
-3. Call `confirm_action(action_id)` to execute.
-
-**Skipping the confirm round-trip:** set `THINGS_MCP_AUTO_CONFIRM=1` and
-`propose_*` tools execute immediately, returning a summary instead of a
-preview. Destructive and bulk operations (`propose_delete_todo`,
-`propose_delete_project`, `propose_delete_heading`, `propose_bulk_complete`,
-`propose_bulk_cancel`, `propose_bulk_move`, `propose_bulk_update`,
-`propose_replace_checklist`) always require an explicit `confirm_action()` call
-regardless of this flag.
-
-**Cancelling a pending action:** call `cancel_action(action_id)`, or simply
-ignore it — pending actions expire after 5 minutes.
+---
 
 ## Client config
 
-The server speaks MCP over stdio. Point any client at the **bundled program**
-you built during install:
-`/absolute/path/to/things-mcp/dist_signed/things-mcp/things-mcp`.
+<details>
+<summary><strong>Claude Desktop</strong></summary>
 
-(Using the `uvx` auto-update method instead? Point `command`/`args` at the repo
-as shown in [Two ways to run it](#two-ways-to-run-it-auto-updates-vs-a-cleaner-permission-prompt)
-— Option A — rather than the bundled path. Trade-off: the prompt then shows
-“python3.11” and recurs more.)
-
-### Claude Desktop — `~/Library/Application Support/Claude/claude_desktop_config.json`
+`~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -379,7 +182,10 @@ as shown in [Two ways to run it](#two-ways-to-run-it-auto-updates-vs-a-cleaner-p
 }
 ```
 
-### Claude Code — `~/.config/claude-code/mcp.json` (or `claude mcp add`)
+</details>
+
+<details>
+<summary><strong>Claude Code</strong></summary>
 
 ```bash
 claude mcp add things \
@@ -388,37 +194,179 @@ claude mcp add things \
   -- /absolute/path/to/things-mcp/dist_signed/things-mcp/things-mcp
 ```
 
-### Cursor — Settings → MCP → Add Server
+</details>
 
-Use the same command as Claude Desktop (no `args` needed), and add an `env`
-block with `THINGS_AUTH_TOKEN` set to your token.
+<details>
+<summary><strong>Cursor</strong></summary>
 
-## Environment
+Settings > MCP > Add Server. Use the same `command` path as Claude Desktop and add an `env` block with `THINGS_AUTH_TOKEN` set to your token.
 
-| Var | Default | Purpose |
-| --- | --- | --- |
-| `THINGS_DB_PATH` | Things default | Override read DB location. |
-| `THINGS_MCP_STATE_DIR` | `~/.things-mcp` | Where `state.db` lives. |
-| `THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for URL-scheme write confirmation. |
-| `THINGS_AUTH_TOKEN` | unset | Required for all mutating tools (`propose_*` and direct writes other than `add_inbox_todo`). Read tools and `add_inbox_todo` work without it. See First-run setup. |
-| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable AppleScript-backed operations: delete to Trash (`propose_delete_todo`, `propose_delete_project`), reorder todos, and all AI tagging operations (`propose_create_ai_tag`, `propose_apply_ai_tags`, etc.). Off by default — the first AppleScript call triggers a one-time macOS Automation permission prompt ("things-mcp wants to control Things 3"). Set alongside `THINGS_AUTH_TOKEN`. |
-| `THINGS_MCP_AI_TAG_PARENT` | `AI` | Name of the parent tag that groups all AI-created tags in the Things Tags window. Change only if you want a different folder name for AI tags. |
-| `THINGS_MCP_UNDO_MAX_ROWS` | `200` | Maximum number of undo entries to retain. Older entries beyond this cap are pruned automatically. |
-| `THINGS_MCP_UNDO_MAX_AGE_DAYS` | `7` | Maximum age (days) of undo entries. Either limit (rows or age) triggers pruning — whichever is hit first. |
-| `THINGS_MCP_AUTO_CONFIRM` | unset | Set to `1` to skip the confirm round-trip for `propose_*` tools — they execute immediately and return a summary. Destructive and bulk operations always require explicit `confirm_action()` regardless. |
+</details>
+
+---
+
+## Tools
+
+### Read (no auth needed)
+
+| Tool | What it does |
+|---|---|
+| `list_inbox` | All to-dos in your Inbox |
+| `list_today` | To-dos scheduled for Today |
+| `list_upcoming` | Upcoming scheduled to-dos (default: next 7 days) |
+| `list_anytime` | To-dos in the Anytime list |
+| `list_someday` | To-dos in the Someday list |
+| `list_logbook` | Recently completed to-dos (default: last 7 days) |
+| `list_trash` | Items currently in Things Trash |
+| `get_areas` | All top-level Areas |
+| `get_projects` | All projects, optionally filtered by Area |
+| `get_project` | A single project with its to-dos and headings |
+| `get_todo` | A single to-do including checklist items and tags |
+| `get_tags` | All tags |
+| `get_checklist_items` | Checklist items for a to-do, with completion state |
+| `search` | Full-text search across titles and notes |
+| `list_ai_tags` | All AI-managed tags with tasks and proposed routing destinations |
+
+### Direct writes
+
+These execute immediately without a confirmation step. Require `THINGS_AUTH_TOKEN` except `add_inbox_todo`. All except `add_inbox_todo` are undoable via `undo`.
+
+| Tool | What it does |
+|---|---|
+| `add_inbox_todo` | Create a to-do in the Inbox (no auth token needed) |
+| `add_today_todo` | Create a to-do scheduled for Today |
+| `add_anytime_todo` | Create a to-do in Anytime |
+| `add_someday_todo` | Create a to-do in Someday |
+| `complete_todo` | Mark a to-do done, moves it to the Logbook |
+
+### Propose/confirm writes
+
+Each `propose_*` call returns a preview for you to approve before anything is written. Requires `THINGS_AUTH_TOKEN`. See [Propose/confirm flow](#proposeconfirm-flow) below.
+
+> **Complete vs Cancel vs Delete**
+>
+> - **Complete** -- marks a task done. Moves to the Things Logbook.
+> - **Cancel** -- marks a task as not happening. Also moves to the Logbook. Use when something won't be done but you want to keep a record.
+> - **Delete** -- moves a task or project to Things Trash. Trash auto-empties after 30 days. Use when you want it gone. Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`.
+
+**To-do operations**
+
+| Tool | What it does |
+|---|---|
+| `propose_add_todo` | Add a to-do to any list or project |
+| `propose_update_todo` | Edit a to-do's title, notes, dates, tags, or status |
+| `propose_move_todo` | Move a to-do to a different list or project |
+| `propose_cancel_todo` | Cancel a to-do, moves it to the Logbook |
+| `propose_delete_todo` † | Delete a to-do, moves to Things Trash |
+
+**Project operations**
+
+| Tool | What it does |
+|---|---|
+| `propose_add_project` | Create a new project, optionally with headings |
+| `propose_update_project` | Edit a project's title, notes, dates, or tags |
+| `propose_cancel_project` | Cancel a project, moves it to the Logbook |
+| `propose_delete_project` † | Delete a project and all its tasks, moves to Trash |
+
+**Heading operations**
+
+| Tool | What it does |
+|---|---|
+| `propose_add_heading` | Add a section heading to a project |
+| `propose_update_heading` | Rename a heading |
+| `propose_delete_heading` | Remove a heading |
+
+**Checklist operations**
+
+| Tool | What it does |
+|---|---|
+| `propose_append_checklist_items` | Add items to the end of a to-do's checklist |
+| `propose_prepend_checklist_items` | Add items to the top of a to-do's checklist |
+| `propose_replace_checklist` | Replace the entire checklist (always requires explicit confirm) |
+
+**Reorder operations**
+
+| Tool | What it does |
+|---|---|
+| `propose_reorder_todos` † | Reorder to-dos within a list or project |
+
+**Bulk operations** (always require explicit confirm, regardless of `THINGS_MCP_AUTO_CONFIRM`)
+
+| Tool | What it does |
+|---|---|
+| `propose_bulk_complete` | Mark multiple to-dos done in one operation |
+| `propose_bulk_cancel` | Cancel multiple to-dos in one operation |
+| `propose_bulk_move` | Move multiple to-dos to a different list or project |
+| `propose_bulk_update` | Edit fields across multiple to-dos at once |
+
+**AI tagging operations** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1` -- see [AI Tagging](#ai-tagging))
+
+| Tool | What it does |
+|---|---|
+| `propose_create_ai_tag` | Create an AI-managed tag under the `AI` parent |
+| `propose_apply_ai_tags` | Apply AI tags to tasks (merge model -- never clobbers user tags) |
+| `propose_cleanup_ai_tags` | Strip transient routing tags after a confirmed sort |
+| `propose_manage_ai_tag` | Rename or reparent an AI tag |
+| `propose_delete_ai_tag` †† | Delete an AI tag, removes it from all tasks |
+| `undo_group` | Reverse an entire multi-step sort atomically in correct reverse order |
+
+† Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`. Uses AppleScript because the Things URL scheme has no delete operation.
+
+†† Always requires explicit `confirm_action()` -- never auto-confirmed.
+
+### Propose/confirm controls
+
+| Tool | What it does |
+|---|---|
+| `confirm_action` | Execute a pending proposed action |
+| `cancel_action` | Discard a pending proposed action |
+| `list_pending_actions` | Show all actions waiting for confirmation |
+
+### Undo
+
+| Tool | What it does |
+|---|---|
+| `undo` | Reverse the most recent action, or a specific one by ID |
+| `undo_group` | Reverse all actions in a group in correct reverse order |
+
+### Meta
+
+| Tool | What it does |
+|---|---|
+| `health` | Server status: DB path, Things running, auth token set, AppleScript state |
+| `recent_undo_log` | List of recent reversible actions |
+
+---
+
+## Propose/confirm flow
+
+Most write tools use a two-phase pattern:
+
+1. Call a `propose_*` tool. It returns a human-readable preview and an `action_id`. Nothing is written yet.
+2. The agent surfaces the preview to you and waits for approval.
+3. Call `confirm_action(action_id)` to execute, or `cancel_action(action_id)` to discard.
+
+Pending actions expire after 5 minutes.
+
+**Skipping the confirm round-trip:** set `THINGS_MCP_AUTO_CONFIRM=1` in the env block. `propose_*` tools will execute immediately and return a summary instead of a preview. The following operations always require an explicit `confirm_action()` regardless of this flag:
+
+- `propose_delete_todo` and `propose_delete_project`
+- `propose_delete_heading`
+- `propose_bulk_complete`, `propose_bulk_cancel`, `propose_bulk_move`, `propose_bulk_update`
+- `propose_replace_checklist`
+- `propose_delete_ai_tag`
+
+---
 
 ## AI Tagging
 
-things-mcp includes an intelligent tagging system that lets an AI agent sort
-and categorise your tasks without guessing. All AI operations follow an
-**abstain-and-flag** philosophy: when confidence is below ~90%, the agent
-applies a flag tag rather than making a potentially wrong call.
+things-mcp includes a tagging system designed for AI agents sorting large task lists. The core principle is **abstain-and-flag**: when the agent's confidence falls below roughly 90%, it applies a persistent flag tag rather than guessing at a destination. One ambiguous task never blocks the rest of the batch.
+
+All AI tagging tools require `THINGS_MCP_ALLOW_APPLESCRIPT=1`. The first call triggers a one-time macOS Automation permission prompt -- click Allow once.
 
 ### How AI tags look in Things
 
-AI-created tags are **asterisk-wrapped** (`*Do Taxes*`, `*Errand*`) and
-grouped under an `AI` parent folder in Things' Tags window. This keeps them
-visually distinct from your own tags.
+AI-created tags are **asterisk-wrapped** (`*Do Taxes*`, `*Errand*`) and grouped under an `AI` parent folder in Things' Tags window. This keeps them visually distinct from your own tags.
 
 ```
 Tags window:
@@ -432,75 +380,138 @@ Tags window:
   Work
 ```
 
-### Abstain-and-flag behaviour
+### Flag tag vocabulary
 
-When an agent sorts a batch of tasks and encounters an ambiguous one, it does
-not guess — it applies a persistent flag tag instead:
+When the agent cannot confidently sort a task, it applies one of these persistent tags instead of guessing:
 
-| Flag tag | Meaning |
-| --- | --- |
-| `*Unclear*` | Generic "I don't know" — review this task |
+| Flag tag | When it is applied |
+|---|---|
+| `*Unclear*` | Generic "I don't know" -- review this task |
 | `*Duplicate?*` | Looks like a near-duplicate; needs human dedup |
-| `*No Time Signal*` | Scheduling requested but no date/time evidence |
-| `*Ambiguous Home*` | Multiple equally-plausible projects/areas |
-| `*Review Delete?*` | Bulk-delete criteria uncertain; tag instead of delete |
+| `*No Time Signal*` | Scheduling was requested but no date/time evidence exists |
+| `*Ambiguous Home*` | Multiple equally-plausible projects or areas |
+| `*Review Delete?*` | Bulk-delete criteria are uncertain; tagged rather than deleted |
 
-Flag tags **persist** until you resolve them — they are never automatically
-removed by sort cleanup. One ambiguous task never blocks the rest of the
-batch.
+Flag tags **persist** until you resolve them. They are never automatically removed by sort cleanup.
 
 ### Sorting workflow
 
-1. **Tag** — `propose_apply_ai_tags` tags each task with a routing tag
-   encoding the proposed destination. Ambiguous tasks get `*Unclear*` instead.
-2. **Review** — `list_ai_tags` shows the proposed routing. Adjust before
-   committing.
-3. **Move** — `propose_bulk_move` moves tasks to their destinations.
-4. **Clean** — `propose_cleanup_ai_tags` strips the routing tags (flag tags
-   like `*Unclear*` are never removed).
+1. **Tag** -- `propose_apply_ai_tags` applies a routing tag to each task encoding the proposed destination. Ambiguous tasks get `*Unclear*` instead. Tags are merged with any existing tags -- existing user tags are never touched.
+2. **Review** -- `list_ai_tags` shows each proposed routing destination. Adjust before committing.
+3. **Move** -- `propose_bulk_move` moves tasks to their destinations.
+4. **Clean** -- `propose_cleanup_ai_tags` strips the transient routing tags. Flag tags like `*Unclear*` are never removed.
 
-To undo the entire sort in one command: `undo_group(group_id)` where
-`group_id` is the shared ID returned by `propose_apply_ai_tags`.
+To undo the entire sort in one command: `undo_group(group_id)` where `group_id` is the shared ID returned by `propose_apply_ai_tags`. This reverses all three steps atomically in the correct reverse order, even if other actions happened in between.
 
-### Requirements
+<details>
+<summary><strong>Duplicate list names and disambiguation</strong></summary>
 
-All AI tagging tools require `THINGS_MCP_ALLOW_APPLESCRIPT=1`. The first
-call triggers a one-time macOS Automation permission prompt ("things-mcp
-wants to control Things 3") — click Allow once. Tag operations use AppleScript
-because the Things URL scheme cannot create tags dynamically.
+Every Things project, area, and task has a stable unique UUID. The routing system records destination UUIDs, not names -- two lists both named "Shopping" are never confused.
 
-Client config example:
+During the review step, any destination with a duplicate name is shown with disambiguating context:
 
-```json
-"env": {
-  "THINGS_AUTH_TOKEN": "…",
-  "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
-}
+- A project inside an Area: *"Shopping -- in Area 'Home'"*
+- A project not inside any Area: *"Shopping -- a standalone project (not in any Area)"*
+
+This wording appears in `list_ai_tags` output and in proposal previews so you can confirm the right destination before moving anything.
+
+</details>
+
+<details>
+<summary><strong>Existing-list matching</strong></summary>
+
+When asked to sort tasks into projects or areas, the agent reads your existing structure first (`get_projects`, `get_areas`) and proposes the best existing destination per task. A new list is only proposed where nothing in your current structure fits, and new lists are only created with explicit approval.
+
+Default bias: reuse existing lists. Avoid creating clutter.
+
+</details>
+
+<details>
+<summary><strong>Guidance document</strong></summary>
+
+`docs/ai-tagging-guidance.md` contains the full agent-side reference:
+
+- The 90% soft confidence anchor (criteria-based, not a numeric gate)
+- Abstain criteria checklist
+- Naming convention: 2-3 words, actionable imperative, Title Case, asterisk-wrapped, under `AI`
+- Partial-execution pattern (act on the confident set, flag the rest, never block)
+- The full sort workflow and undo procedure
+- Disambiguation terminology
+
+</details>
+
+---
+
+## Undo
+
+Every confirmed write -- direct writes and confirmed `propose_*` actions alike -- records its inverse state to `undo_log` before executing the mutation. If something goes wrong or you change your mind, undo is always available.
+
+```
+# Reverse the most recent action
+undo()
+
+# Reverse a specific action by ID
+undo(undo_id="abc123")
+
+# Reverse an entire multi-step sort atomically (correct LIFO order)
+undo_group(group_id="sort-xyz")
 ```
 
-See `docs/ai-tagging-guidance.md` for the full agent-side reference:
-90% soft confidence anchor, naming conventions, partial-execution pattern,
-and disambiguation terminology.
+`undo_group` is designed for the AI sorting workflow: a full sort produces three undo_log entries (`apply_ai_tags`, `bulk_move`, `cleanup_ai_tags`) that share a `group_id`. Passing that ID to `undo_group` reverses all three in the correct order, regardless of other actions that may have happened since.
+
+**Retention:** by default, undo entries are kept for 7 days or up to 200 rows, whichever limit is hit first. Both limits are configurable via environment variables.
+
+---
+
+## Environment
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `THINGS_DB_PATH` | Things default | Override the read DB location |
+| `THINGS_MCP_STATE_DIR` | `~/.things-mcp` | Directory where `state.db` lives |
+| `THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for URL-scheme write confirmation |
+| `THINGS_AUTH_TOKEN` | unset | Required for all mutating tools. Read tools and `add_inbox_todo` work without it. |
+| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable: delete to Trash, reorder todos, and all AI tagging operations. The first call triggers a one-time macOS Automation permission prompt. |
+| `THINGS_MCP_AI_TAG_PARENT` | `AI` | Name of the parent tag that groups all AI-created tags in the Things Tags window |
+| `THINGS_MCP_UNDO_MAX_ROWS` | `200` | Maximum number of undo entries to retain |
+| `THINGS_MCP_UNDO_MAX_AGE_DAYS` | `7` | Maximum age in days of undo entries. Pruning triggers when either limit is hit first. |
+| `THINGS_MCP_AUTO_CONFIRM` | unset | Set to `1` to skip the confirm round-trip for `propose_*` tools. Destructive and bulk operations always require explicit `confirm_action()` regardless. |
+
+---
 
 ## Architecture
 
-See `docs/things-mcp-V2-technical-architecture-and-implementation-plan.md` for
-the full design. Short version:
+<details>
+<summary><strong>How it works</strong></summary>
 
-- Reads go through `things.py` (a read-only SQLite wrapper) via
-  `services/things_repo.py` — single swap-point if the schema moves.
-- Writes go through the Things URL scheme. An ephemeral aiohttp listener on
-  `127.0.0.1` captures the `x-callback-url` response and the new task's UUID.
-- Local SQLite state lives at `~/.things-mcp/state.db` (`pending_actions`,
-  `undo_log` — both scaffolded for V2).
+**Reads** go through `things.py` (a read-only SQLite wrapper maintained by the `things.py` project) via `services/things_repo.py`. This is a single swap-point if the Things schema changes.
+
+**Writes** go through the Things URL scheme. An ephemeral aiohttp HTTP listener on `127.0.0.1` captures the `x-callback-url` response and the new task's UUID after each write.
+
+**State** is kept in a local SQLite database at `~/.things-mcp/state.db`. Three tables:
+- `pending_actions` -- proposed actions awaiting confirmation (expire after 5 minutes)
+- `undo_log` -- reversible action history with before/after state snapshots and `group_id` for atomic multi-step undo
+- `ai_tag_routing` -- maps AI routing tags to their proposed destination UUIDs and transient/persistent status
+
+**AppleScript** operations (delete to Trash, reorder, all AI tagging) are handled by `services/applescript.py`, which provides hardened string escaping, the `THINGS_MCP_ALLOW_APPLESCRIPT` gate, and an auth probe. The Things URL scheme has no delete or tag-create operations, so AppleScript is the only channel for these.
+
+**AI tag invariants** are enforced server-side: the asterisk wrapper (`*…*`) and parent-tag assignment are structural rules validated in the handler code, not relying on the agent to remember them. The agent is responsible for confidence judgments; the server is responsible for structural correctness.
+
+</details>
+
+---
 
 ## Status
 
-V1 (read + Inbox-create) and V2 (full write parity) are complete, including
-AI-assisted tagging and sorting with abstain-and-flag safety. All operations
-go through propose/confirm + undo. The tool surface covers to-dos, projects,
-headings, checklists, bulk operations, and AI tagging. AppleScript-backed
-operations (delete to Trash, reorder, AI tagging) require
-`THINGS_MCP_ALLOW_APPLESCRIPT=1`. See
-`docs/things-mcp-V2-technical-architecture-and-implementation-plan.md` §0 for
-the detailed implementation history.
+V1 (read + Inbox-create) and V2 (full write parity) are complete, including AI-assisted tagging and sorting with abstain-and-flag safety. All mutating operations go through propose/confirm with full undo support.
+
+**Tool surface covers:**
+- All Things lists (Inbox, Today, Upcoming, Anytime, Someday, Logbook, Trash)
+- Areas, projects, headings, to-dos, checklist items, tags
+- Bulk operations (complete, cancel, move, update)
+- AI tagging with abstain-and-flag, routing workflow, group undo
+- Meta: health check, undo log
+
+**AppleScript-backed operations** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1`): delete to Trash, reorder, and all AI tagging.
+
+For implementation details, see `docs/things-mcp-V2-technical-architecture-and-implementation-plan.md`.
