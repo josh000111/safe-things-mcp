@@ -586,9 +586,18 @@ async def propose_replace_checklist(todo_id: str, items: list[str]) -> dict:
 async def propose_create_ai_tag(name: str, parent: str = "AI") -> dict:
     """Propose creating an AI-managed tag under the AI parent folder.
 
-    The name MUST be asterisk-wrapped (e.g. '*Do Taxes*'). Server
-    enforces this structural invariant. If the tag already exists,
-    this is a no-op.
+    NAMING CONVENTION — all AI tags must follow this pattern:
+    - Asterisk-wrapped: ``*Do Taxes*``, ``*Buy Groceries*``, ``*Errand*``
+    - ≤2–3 words, actionable imperative or clear noun, Title Case
+    - Under the ``AI`` parent (server enforces parent assignment)
+    - Server enforces the asterisk wrapper — rejects malformed names
+
+    Use the persistent abstain vocabulary for ambiguous cases:
+    ``*Unclear*``, ``*Duplicate?*``, ``*No Time Signal*``,
+    ``*Ambiguous Home*``, ``*Review Delete?*`` — all parented under
+    ``AI``, all with ``transient=false``.
+
+    Idempotent: if the tag already exists, this is a no-op success.
 
     Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
@@ -611,8 +620,11 @@ async def propose_manage_ai_tag(
 ) -> dict:
     """Propose renaming and/or reparenting an AI tag.
 
-    At least one of new_name / new_parent is required. new_name must
-    also be asterisk-wrapped.
+    At least one of ``new_name`` / ``new_parent`` is required.
+    ``new_name`` must also be asterisk-wrapped (``*New Name*``).
+
+    Naming convention: ≤2–3 words, Title Case, asterisk-wrapped.
+    Parent is normally ``AI``; only change if intentional.
 
     Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
@@ -633,8 +645,16 @@ async def propose_manage_ai_tag(
 async def propose_delete_ai_tag(name: str) -> dict:
     """Propose deleting an AI tag — removes it from ALL tasks that carry it.
 
-    This is a NEVER_BYPASS kind — explicit confirm_action() required
-    even with THINGS_MCP_AUTO_CONFIRM=1.
+    WARNING: Wide-blast destructive operation. The tag is removed from
+    every task carrying it — not just the current batch. Use
+    ``list_ai_tags()`` first to see how many tasks carry the tag.
+
+    Consider ``propose_cleanup_ai_tags`` for targeted post-sort cleanup
+    (strips only transient routing tags from specific tasks); use this
+    only to permanently remove a tag from the entire system.
+
+    This is a NEVER_BYPASS kind — explicit ``confirm_action()`` required
+    even with ``THINGS_MCP_AUTO_CONFIRM=1``.
 
     Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
@@ -659,28 +679,43 @@ async def propose_apply_ai_tags(
     MERGE MODEL: new tag set = existing tags ∪ add_tags. Never clobbers
     user tags. Undo restores the EXACT prior tag set.
 
+    ABSTAIN RULE (90% soft anchor — criteria-based, not numeric):
+    When confidence is below ~90%, or any criterion fires, abstain and
+    apply ``*Unclear*`` (with ``routing=null``, ``transient=false``) rather
+    than guessing. Criteria that trigger abstain:
+    - Ambiguous destination (multiple equally-plausible projects/areas)
+    - No time signal (scheduling requested but no date/duration evidence)
+    - Suspected near-duplicate
+    - Nothing-fits semantic label (forced label would mislead)
+    - Uncertain destructive membership (bulk-delete criteria unclear)
+    Use the specific vocabulary when the reason is known:
+    ``*Duplicate?*``, ``*No Time Signal*``, ``*Ambiguous Home*``,
+    ``*Review Delete?*``. One unclear task NEVER blocks the rest of the
+    batch — mix confident and unclear items in the same call.
+
+    PARTIAL EXECUTION: Confident items get routing tags; unclear items
+    get abstain tags (``transient=false``). Both in the same ``items`` list.
+
     Each item in ``items`` must have:
     - ``todo_uuid`` — the to-do's UUID
     - ``add_tags`` — list of asterisk-wrapped AI tag names (e.g. ``["*Do Taxes*"]``)
     - ``routing`` (optional) — ``{dest_kind, dest_uuid, transient}`` if this
       tag encodes a proposed sort destination. Set ``transient=true`` for
       routing tags that should be auto-cleaned after the move. Leave ``null``
-      for persistent semantic tags (``*Unclear*``, ``*Ambiguous Home*``, etc.).
+      for persistent abstain tags (``*Unclear*``, ``*Ambiguous Home*``, etc.).
 
-    EXISTING-LIST MATCHING (G6): Before calling this tool, read existing
+    EXISTING-LIST MATCHING (default bias): Before calling, read existing
     projects/areas via ``get_projects``/``get_areas`` and prefer existing
-    destinations. Only propose a new list where nothing fits, and only with
-    explicit user approval. When a destination name is ambiguous (duplicate
-    names), show context: "Shopping — in Area 'Home'" or "Shopping — a
-    standalone project (not in any Area)".
+    destinations. Only propose a new list where nothing fits, and only
+    with explicit user approval. When a destination name is ambiguous
+    (duplicate names), show context: "Shopping — in Area 'Home'" or
+    "Shopping — a standalone project (not in any Area)".
 
-    ABSTAIN RULE: When confidence < 90% or criteria are ambiguous, apply
-    ``*Unclear*`` (transient=false) rather than guessing. One unclear task
-    never blocks the rest of the batch.
-
-    Pass ``group_id`` (a shared UUID) to link all undo_log entries from one
-    sort (apply_ai_tags → bulk_move → cleanup_ai_tags) so ``undo_group`` can
-    reverse the whole sort atomically.
+    SORT WORKFLOW: apply_ai_tags → (user reviews via list_ai_tags) →
+    bulk_move → cleanup_ai_tags. Pass ``group_id`` (a shared UUID you
+    generate once per sort) to link all undo_log entries so
+    ``undo_group(group_id)`` can reverse the whole sort atomically.
+    Surface the ``group_id`` to the user so they can undo in one command.
 
     Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
@@ -703,12 +738,17 @@ async def propose_cleanup_ai_tags(
     """Propose removing transient AI routing tags from to-dos after a confirmed sort.
 
     Strips ONLY ``transient=1`` routing tags recorded in ``ai_tag_routing``.
-    NEVER strips ``*Unclear*`` or other persistent abstain tags (those have
-    ``transient=0`` and are not touched by cleanup).
+    NEVER strips ``*Unclear*``, ``*Duplicate?*``, ``*Ambiguous Home*``,
+    ``*No Time Signal*``, or ``*Review Delete?*`` — persistent abstain tags
+    have ``transient=0`` and are never touched by cleanup.
 
-    Call this AFTER ``bulk_move`` has confirmed the tasks landed in their new
+    Call AFTER ``bulk_move`` has confirmed tasks landed in their new
     destinations. Pass the same ``group_id`` used in ``propose_apply_ai_tags``
     and ``propose_bulk_move`` to keep the undo group linked.
+
+    After this completes, the user can call ``undo_group(group_id)`` to
+    reverse the entire sort (cleanup → move → tag-apply) in correct LIFO
+    order.
 
     Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """

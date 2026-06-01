@@ -42,7 +42,14 @@ async def undo_group(group_id: str) -> dict:
     happened in between.
 
     Use the ``group_id`` returned by ``propose_apply_ai_tags`` (or any handler
-    in the sort). Returns a list of undo results, one per reversed entry.
+    in the sort chain). The ``group_id`` is also shown in ``recent_undo_log()``
+    under the ``group_id`` field.
+
+    Returns a list of undo results, one per reversed entry, in the order
+    they were undone (cleanup → move → tags, i.e. newest-first).
+
+    TIP: After undoing a sort, you can re-run it — the agent remembers what
+    it just did and can reproduce the sort with adjustments based on feedback.
     """
     entries = undo_log.get_by_group_id(group_id)
     if not entries:

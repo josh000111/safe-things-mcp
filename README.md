@@ -290,6 +290,27 @@ Uses AppleScript for operations the Things URL scheme cannot perform.
 
 † Moves to Things Trash via AppleScript; requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`.
 
+AI tagging operations also require `THINGS_MCP_ALLOW_APPLESCRIPT=1` — see
+[AI Tagging](#ai-tagging) below.
+
+**AI tagging ops** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1`)
+
+AI-created tags are asterisk-wrapped (`*Do Taxes*`) and grouped under an
+`AI` parent folder in the Things Tags window. See [AI Tagging](#ai-tagging)
+for the full workflow.
+
+| Tool | What it does |
+| --- | --- |
+| `list_ai_tags` | List all AI-managed tags with their tasks and proposed routing destinations |
+| `propose_create_ai_tag` | Create an AI tag under the `AI` parent (`*TagName*` format) |
+| `propose_apply_ai_tags` | Apply AI tags to tasks (merge model — never clobbers user tags) |
+| `propose_cleanup_ai_tags` | Strip transient routing tags after a confirmed sort |
+| `propose_manage_ai_tag` | Rename or reparent an AI tag |
+| `propose_delete_ai_tag`† | Delete an AI tag — removes it from all tasks that carry it |
+| `undo_group` | Reverse an entire multi-step sort atomically (apply → move → cleanup) |
+
+† Always requires explicit `confirm_action()` — never auto-confirmed.
+
 ### Propose/confirm controls
 
 | Tool | What it does |
@@ -380,8 +401,86 @@ block with `THINGS_AUTH_TOKEN` set to your token.
 | `THINGS_MCP_STATE_DIR` | `~/.things-mcp` | Where `state.db` lives. |
 | `THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for URL-scheme write confirmation. |
 | `THINGS_AUTH_TOKEN` | unset | Required for all mutating tools (`propose_*` and direct writes other than `add_inbox_todo`). Read tools and `add_inbox_todo` work without it. See First-run setup. |
-| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable AppleScript-backed operations: delete to Trash (`propose_delete_todo`, `propose_delete_project`) and certain advanced task management operations. Off by default — the first AppleScript call triggers a one-time macOS Automation permission prompt ("things-mcp wants to control Things 3"). Set alongside `THINGS_AUTH_TOKEN`. |
+| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable AppleScript-backed operations: delete to Trash (`propose_delete_todo`, `propose_delete_project`), reorder todos, and all AI tagging operations (`propose_create_ai_tag`, `propose_apply_ai_tags`, etc.). Off by default — the first AppleScript call triggers a one-time macOS Automation permission prompt ("things-mcp wants to control Things 3"). Set alongside `THINGS_AUTH_TOKEN`. |
+| `THINGS_MCP_AI_TAG_PARENT` | `AI` | Name of the parent tag that groups all AI-created tags in the Things Tags window. Change only if you want a different folder name for AI tags. |
+| `THINGS_MCP_UNDO_MAX_ROWS` | `200` | Maximum number of undo entries to retain. Older entries beyond this cap are pruned automatically. |
+| `THINGS_MCP_UNDO_MAX_AGE_DAYS` | `7` | Maximum age (days) of undo entries. Either limit (rows or age) triggers pruning — whichever is hit first. |
 | `THINGS_MCP_AUTO_CONFIRM` | unset | Set to `1` to skip the confirm round-trip for `propose_*` tools — they execute immediately and return a summary. Destructive and bulk operations always require explicit `confirm_action()` regardless. |
+
+## AI Tagging
+
+things-mcp includes an intelligent tagging system that lets an AI agent sort
+and categorise your tasks without guessing. All AI operations follow an
+**abstain-and-flag** philosophy: when confidence is below ~90%, the agent
+applies a flag tag rather than making a potentially wrong call.
+
+### How AI tags look in Things
+
+AI-created tags are **asterisk-wrapped** (`*Do Taxes*`, `*Errand*`) and
+grouped under an `AI` parent folder in Things' Tags window. This keeps them
+visually distinct from your own tags.
+
+```
+Tags window:
+  AI/
+    *Ambiguous Home*
+    *Do Taxes*
+    *Errand*
+    *Unclear*
+  (your own tags)
+  Home
+  Work
+```
+
+### Abstain-and-flag behaviour
+
+When an agent sorts a batch of tasks and encounters an ambiguous one, it does
+not guess — it applies a persistent flag tag instead:
+
+| Flag tag | Meaning |
+| --- | --- |
+| `*Unclear*` | Generic "I don't know" — review this task |
+| `*Duplicate?*` | Looks like a near-duplicate; needs human dedup |
+| `*No Time Signal*` | Scheduling requested but no date/time evidence |
+| `*Ambiguous Home*` | Multiple equally-plausible projects/areas |
+| `*Review Delete?*` | Bulk-delete criteria uncertain; tag instead of delete |
+
+Flag tags **persist** until you resolve them — they are never automatically
+removed by sort cleanup. One ambiguous task never blocks the rest of the
+batch.
+
+### Sorting workflow
+
+1. **Tag** — `propose_apply_ai_tags` tags each task with a routing tag
+   encoding the proposed destination. Ambiguous tasks get `*Unclear*` instead.
+2. **Review** — `list_ai_tags` shows the proposed routing. Adjust before
+   committing.
+3. **Move** — `propose_bulk_move` moves tasks to their destinations.
+4. **Clean** — `propose_cleanup_ai_tags` strips the routing tags (flag tags
+   like `*Unclear*` are never removed).
+
+To undo the entire sort in one command: `undo_group(group_id)` where
+`group_id` is the shared ID returned by `propose_apply_ai_tags`.
+
+### Requirements
+
+All AI tagging tools require `THINGS_MCP_ALLOW_APPLESCRIPT=1`. The first
+call triggers a one-time macOS Automation permission prompt ("things-mcp
+wants to control Things 3") — click Allow once. Tag operations use AppleScript
+because the Things URL scheme cannot create tags dynamically.
+
+Client config example:
+
+```json
+"env": {
+  "THINGS_AUTH_TOKEN": "…",
+  "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
+}
+```
+
+See `docs/ai-tagging-guidance.md` for the full agent-side reference:
+90% soft confidence anchor, naming conventions, partial-execution pattern,
+and disambiguation terminology.
 
 ## Architecture
 
@@ -397,10 +496,11 @@ the full design. Short version:
 
 ## Status
 
-V1 (read + Inbox-create) and V2 (full write parity) are complete. All
-operations go through propose/confirm + undo. The tool surface covers to-dos,
-projects, headings, checklists, and bulk operations. AppleScript-backed
-operations (delete to Trash, advanced task management) require
+V1 (read + Inbox-create) and V2 (full write parity) are complete, including
+AI-assisted tagging and sorting with abstain-and-flag safety. All operations
+go through propose/confirm + undo. The tool surface covers to-dos, projects,
+headings, checklists, bulk operations, and AI tagging. AppleScript-backed
+operations (delete to Trash, reorder, AI tagging) require
 `THINGS_MCP_ALLOW_APPLESCRIPT=1`. See
 `docs/things-mcp-V2-technical-architecture-and-implementation-plan.md` §0 for
 the detailed implementation history.

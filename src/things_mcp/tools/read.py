@@ -104,16 +104,21 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def list_ai_tags() -> dict:
-        """List all AI-managed tags under the AI parent, with their tasks and routing info.
+        """List all AI-managed tags under the AI parent, with tasks and routing info.
 
-        Returns the AI parent tag, its children (AI tags), and for each tag:
-        the tasks carrying it plus any proposed sort destinations from
-        ai_tag_routing. Powers the review phase of the tag-first→review→move
-        workflow.
+        Use this during the REVIEW PHASE of a tag-first→review→move sort to
+        inspect proposed routing before confirming ``bulk_move``. Each tag shows:
+        - tasks carrying it (uuid, title, status)
+        - routing rows from ``ai_tag_routing`` (proposed destination, transient flag)
 
-        Disambiguating context for destinations: projects in an Area show as
-        "Name — in Area 'AreaName'"; standalone projects (not in any Area)
-        show as "Name — a standalone project (not in any Area)".
+        Disambiguating context for destinations:
+        - "Name — in Area 'AreaName'" for projects inside an Area
+        - "Name — a standalone project (not in any Area)" for top-level projects
+
+        Persistent abstain tags (``*Unclear*``, ``*Duplicate?*``,
+        ``*Ambiguous Home*``, ``*No Time Signal*``, ``*Review Delete?*``)
+        appear here and must be resolved manually — they are never
+        auto-cleaned by ``cleanup_ai_tags``.
         """
         from ..state import ai_tag_routing as atr
         from ..config import AI_TAG_PARENT
@@ -147,12 +152,28 @@ def register(mcp: FastMCP) -> None:
                 return f"Project {dest_uuid}"
             return f"{dest_kind} {dest_uuid}"
 
+        # Build a uuid→parent_uuid map directly from TMTag (things.py's flat list
+        # omits the parent field, so we query SQLite ourselves, read-only).
+        import sqlite3 as _sqlite3
+        from ..config import THINGS_DB_PATH as _DB_PATH
+        _child_uuids: set[str] = set()
+        try:
+            with _sqlite3.connect(f"file:{_DB_PATH}?mode=ro", uri=True) as _conn:
+                _rows = _conn.execute(
+                    "SELECT child.uuid FROM TMTag child "
+                    "JOIN TMTag parent ON child.parent = parent.uuid "
+                    "WHERE parent.title = ?",
+                    (AI_TAG_PARENT,),
+                ).fetchall()
+                _child_uuids = {r[0] for r in _rows}
+        except Exception:
+            pass  # Fall back to empty set; ai_tags will be [] rather than crash
+
         # Collect AI child tags
         ai_children: list[dict] = []
         if ai_parent:
             for tag in all_tags:
-                parent = tag.get("parent_title") or tag.get("parent")
-                if parent != AI_TAG_PARENT:
+                if tag.get("uuid") not in _child_uuids:
                     continue
                 title = tag.get("title", "")
                 # Get tasks carrying this tag
