@@ -14,3 +14,10 @@ build/
 tests/
 docs/
 CLAUDE.md Backups/
+
+# Code-signing experiment artifacts (never commit the private key)
+dist_signed/
+build_tools/pyi_work/
+build_tools/*.pem
+build_tools/*.p12
+build_tools/*.spec

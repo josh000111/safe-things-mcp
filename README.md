@@ -21,15 +21,31 @@ more.
 ```bash
 git clone <this repo> things-mcp
 cd things-mcp
-uv venv --python /opt/homebrew/bin/python3   # must be a system Python — see macOS Permission Prompts
+uv venv --python /opt/homebrew/bin/python3
 uv sync
 ```
 
-Sanity check:
+Sanity check (verifies dependencies installed):
 
 ```bash
 .venv/bin/things-mcp --help
 ```
+
+There are **two ways to run the server** — see
+[Two ways to run it](#two-ways-to-run-it-auto-updates-vs-a-cleaner-permission-prompt)
+for the full trade-off:
+
+- **Want effortless updates?** Use the `uvx` method (Option A) — you can skip the
+  build below and point your client straight at the repo.
+- **Want the cleanest macOS permission prompt?** Build the signed bundle (Option B):
+
+```bash
+./build_tools/build_signed.sh
+```
+
+This produces a self-contained program at `dist_signed/things-mcp/things-mcp` and
+prints a ready-to-paste client config block. Point your client's `command` at
+that program (see [Client config](#client-config)).
 
 ## First-run setup
 
@@ -48,34 +64,127 @@ Verify with: ask the agent *"call health()"* → `url_scheme_auth_token_set: tru
 
 ### macOS Permission Prompts
 
-things-mcp triggers two distinct macOS permission dialogs. Both are one-time —
-click **Allow** on each and they will not appear again.
+things-mcp triggers two distinct macOS permission dialogs.
 
-**1. "python3.11 would like to access data from other apps"**
+**1. "python … would like to access data from other apps"** — the recurring one
 
-Appears on the very first launch. things-mcp reads the Things 3 database
-directly from its protected app-container folder; macOS requires your consent
-before any other process can access another app's data.
+things-mcp reads the Things 3 database directly from Things' protected
+app-container folder, so macOS (TCC) asks for consent before another app's data
+can be read.
 
-Click **Allow**. The grant is tied to the specific Python binary in your
-`.venv` (Homebrew's `python3.11`). It will **not** recur unless you explicitly
-run `brew upgrade python@3.11` and recreate the venv — an intentional,
-infrequent action.
+macOS only **remembers** that consent for a program with a *stable, signed
+identity*. When the server runs on a plain Python interpreter, macOS sees an
+ad-hoc (effectively anonymous) program with no durable identity, so it cannot
+record the grant — and re-prompts on **every launch** (and again when the client
+spawns the server mid-session). This is not specific to this project; it affects
+every Things MCP that reads the database through an unsigned interpreter.
 
-> **Why you must use a system Python for the venv (`uv venv --python
-> /opt/homebrew/bin/python3`):** if you run plain `uv venv`, uv manages the
-> Python interpreter itself and stores it at a versioned path inside
-> `~/.local/share/uv/python/` (e.g.
-> `cpython-3.13.x-macos-aarch64-none/bin/python3.13`). That path changes with
-> every uv-managed Python update, so macOS sees a new binary each time and
-> re-prompts on every session. A Homebrew Python has a stable path that only
-> changes when you explicitly upgrade it.
+**The fix: run a signed standalone build.** `build_tools/build_signed.sh` freezes
+the server into a single binary and signs it with a stable, reused certificate,
+giving macOS an identity it can remember:
+
+```bash
+./build_tools/build_signed.sh
+```
+
+Then point your MCP client's `command` at the printed path
+(`dist_signed/things-mcp/things-mcp`) instead of `.venv/bin/things-mcp`. You'll
+get **one** "things-mcp would like to access data from other apps" prompt — click
+Allow — and on a **direct-launch client it should not return.** (If it does still
+recur there, run the one-time `add-trusted-cert` command the script prints.)
+
+> #### ⚠️ Claude Desktop is the exception
+>
+> Claude Desktop does **not** launch MCP servers directly — it wraps them in a
+> middleman helper (`Claude.app/Contents/Helpers/disclaimer`). macOS records the
+> permission against the middleman, not your server, and then forgets it — so on
+> Claude Desktop **the prompt recurs on every launch no matter how the server is
+> signed.** We verified this empirically (ad-hoc, self-signed, and self-signed +
+> system-trusted binaries all re-prompt identically). It is an upstream Claude
+> Desktop bug: [anthropics/claude-code#36832](https://github.com/anthropics/claude-code/issues/36832).
+>
+> On Claude Desktop your only options today are:
+> - **Use a direct-launch client** for a prompt-free experience (Cursor, VS Code,
+>   Codex, Claude Code CLI) with the signed build above, **or**
+> - **Grant Full Disk Access to Claude** (System Settings → Privacy & Security →
+>   Full Disk Access → add `/Applications/Claude.app`). This persists because it
+>   attaches to Claude itself, not the middleman. **Caveat — this is broad:** it
+>   removes the OS file-access guardrail for *everything* Claude runs (every MCP
+>   server and agent action), so opt in only if you accept that trade-off. It does
+>   **not** bypass Claude's own per-tool approval prompts — only the OS-level
+>   file check, **or**
+> - **Wait** for the upstream fix and live with the prompt in the meantime.
 
 **2. "things-mcp wants to control Things 3"**
 
 Appears the first time an AppleScript-backed operation runs (requires
-`THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow**. Truly one-time — this
-grant never resets unless you revoke it in System Settings.
+`THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow**. This Automation grant is
+one-time and persists.
+
+## Two ways to run it: auto-updates vs. a cleaner permission prompt
+
+There are two ways to run things-mcp, and they trade off **easy updates**
+against **the macOS permission-prompt experience**. Pick what matters more to
+you. (Note: `npx` is for Node packages — this server is Python, so the
+auto-update runner is **`uvx`**, not npx.)
+
+### Option A — `uvx` (easiest updates)
+
+Point your client straight at the repo; uv fetches, builds, and runs it:
+
+```json
+{
+  "mcpServers": {
+    "things-mcp": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/josh000111/things-mcp", "things-mcp"],
+      "env": { "THINGS_AUTH_TOKEN": "paste-token-here", "THINGS_MCP_ALLOW_APPLESCRIPT": "1" }
+    }
+  }
+}
+```
+
+- **Updates:** trivial. Add `"--refresh"` to `args` to pull the latest on every
+  launch (costs a few seconds of network at startup); without it, uv reuses the
+  cached copy until you refresh. No manual build, ever.
+- **Permission prompt:** shows **“python3.11”** (the interpreter, not us). Because
+  a bare interpreter has no stable signed identity, macOS **re-prompts on
+  essentially every launch, on every client.**
+
+### Option B — signed bundle (cleanest prompt)
+
+Build the single signed program (see [Install](#install)) and point your client
+at `…/dist_signed/things-mcp/things-mcp`.
+
+- **Updates:** manual — `git pull && uv sync && ./build_tools/build_signed.sh`,
+  then restart the client.
+- **Permission prompt:** shows **“things-mcp”**, and on clients that launch it
+  directly the approval is **remembered (one prompt, then never again).**
+
+### What the permission prompt does, by client
+
+| Client | Option A — `uvx` | Option B — signed bundle |
+|---|---|---|
+| **Claude Desktop** | “python3.11”, **every launch** (~2× per session) | “things-mcp”, **every launch** (~2× per session) |
+| **Cursor / VS Code / Codex** | “python3.11”, **recurs** | “things-mcp”, **once, then remembered**\* |
+| Effort to update | trivial / auto | manual rebuild |
+
+\* Expected — this is the whole point of signing — but verify on first use. If it
+still recurs on a direct-launch client, run the one-time `trust` command the
+build script prints.
+
+**Why Claude Desktop always re-prompts (either option):** it launches MCP servers
+through a helper (`Claude.app/Contents/Helpers/disclaimer`) that stops macOS from
+remembering the grant for *any* add-on, regardless of signing — upstream bug
+[anthropics/claude-code#36832](https://github.com/anthropics/claude-code/issues/36832).
+The only way to stop the prompt there is **Full Disk Access on Claude itself**,
+which is broad (see [macOS Permission Prompts](#macos-permission-prompts)). The
+other clients have no such helper, which is why signing works for them.
+
+**Rule of thumb:** mostly on **Claude Desktop** and want effortless updates →
+**Option A** (the prompt recurs there either way, so you give up little). On
+**Cursor / VS Code / Codex** and want the prompt to stop after the first
+approval → **Option B**.
 
 ## Tools
 
@@ -224,8 +333,14 @@ ignore it — pending actions expire after 5 minutes.
 
 ## Client config
 
-The server speaks MCP over stdio. Point any client at the venv's entry point:
-`/absolute/path/to/things-mcp/.venv/bin/things-mcp`.
+The server speaks MCP over stdio. Point any client at the **bundled program**
+you built during install:
+`/absolute/path/to/things-mcp/dist_signed/things-mcp/things-mcp`.
+
+(Using the `uvx` auto-update method instead? Point `command`/`args` at the repo
+as shown in [Two ways to run it](#two-ways-to-run-it-auto-updates-vs-a-cleaner-permission-prompt)
+— Option A — rather than the bundled path. Trade-off: the prompt then shows
+“python3.11” and recurs more.)
 
 ### Claude Desktop — `~/Library/Application Support/Claude/claude_desktop_config.json`
 
@@ -233,7 +348,7 @@ The server speaks MCP over stdio. Point any client at the venv's entry point:
 {
   "mcpServers": {
     "things": {
-      "command": "/absolute/path/to/things-mcp/.venv/bin/things-mcp",
+      "command": "/absolute/path/to/things-mcp/dist_signed/things-mcp/things-mcp",
       "env": {
         "THINGS_AUTH_TOKEN": "paste-token-here",
         "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
@@ -249,7 +364,7 @@ The server speaks MCP over stdio. Point any client at the venv's entry point:
 claude mcp add things \
   -e THINGS_AUTH_TOKEN=paste-token-here \
   -e THINGS_MCP_ALLOW_APPLESCRIPT=1 \
-  -- /absolute/path/to/things-mcp/.venv/bin/things-mcp
+  -- /absolute/path/to/things-mcp/dist_signed/things-mcp/things-mcp
 ```
 
 ### Cursor — Settings → MCP → Add Server
