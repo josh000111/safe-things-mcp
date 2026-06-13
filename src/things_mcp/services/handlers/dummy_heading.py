@@ -17,6 +17,8 @@ import re
 
 DUMMY_PATTERN = re.compile(r'^__[A-Z][A-Z0-9 _\-:]*__$')
 
+AI_NEWLY_ADDED_HEADING = "__NEWLY ADDED BY AI__"  # passes DUMMY_PATTERN
+
 
 def is_dummy_heading(title: str) -> bool:
     """Return True if the title matches the dummy-heading format."""

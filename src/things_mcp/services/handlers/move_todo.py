@@ -12,10 +12,10 @@ Move semantics in Things are dimensional:
 This handler accepts a single ``target`` argument and infers which
 dimension it represents:
 
+* ``inbox`` → scheduling move via AppleScript (requires ALLOW_APPLESCRIPT)
 * ``today`` / ``anytime`` / ``someday`` → scheduling move via ``when=``
 * a 22-char UUID → project/area move via ``list-id=``
-* ``inbox`` / ``upcoming`` / ``logbook`` / ``trash`` → rejected with
-  hint (``inbox`` and specific-date moves arrive in a follow-up)
+* ``upcoming`` / ``logbook`` / ``trash`` → rejected with hint
 
 The undo restores **only the dimension that was changed**, leaving the
 other dimension alone (so cross-dimensional manual edits made between
@@ -29,15 +29,14 @@ import asyncio
 from typing import Any
 
 from ... import config
-from .. import things_repo, url_scheme
+from .. import applescript, things_repo, url_scheme
 from ...state import undo_log
 
 KIND = "move_todo"
 
 _WHEN_KEYWORDS = {"today", "anytime", "someday"}
-# Computed views and inbox: not supported in first cut. Document why so
-# the agent can surface the right hint to the user.
-_REJECT_KEYWORDS = {"inbox", "upcoming", "logbook", "trash"}
+# Computed views and destructive targets: not valid move destinations.
+_REJECT_KEYWORDS = {"upcoming", "logbook", "trash"}
 
 
 def make_preview(payload: dict) -> str:
@@ -51,13 +50,18 @@ async def execute(payload: dict) -> dict:
 
     if target_lower in _REJECT_KEYWORDS:
         raise ValueError(
-            f"target={target!r} not supported by propose_move_todo in V2 "
-            "first cut. Supported targets: 'today', 'anytime', 'someday', "
-            "or a project/area UUID. Move-to-Inbox and specific-date moves "
-            "are deferred to a follow-up."
+            f"target={target!r} not supported by propose_move_todo. "
+            "Supported targets: 'inbox' (requires THINGS_MCP_ALLOW_APPLESCRIPT=1), "
+            "'today', 'anytime', 'someday', or a project/area UUID."
         )
     if not target:
         raise ValueError("target is required")
+
+    if target_lower == "inbox" and not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "Moving to Inbox requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Set the environment variable and restart the MCP server."
+        )
 
     auth_token = config.THINGS_AUTH_TOKEN
     if not auth_token:
@@ -76,8 +80,12 @@ async def execute(payload: dict) -> dict:
 
     # Decide which dimension we're moving along, and capture the inverse
     # params that will put the task back where it was.
-    if target_lower in _WHEN_KEYWORDS:
-        move_params: dict[str, Any] = {"when": target_lower}
+    if target_lower == "inbox":
+        move_params: dict[str, Any] = {}  # handled via AppleScript below
+        inverse_params = _inverse_scheduling(before)
+        dimension = "inbox"
+    elif target_lower in _WHEN_KEYWORDS:
+        move_params = {"when": target_lower}
         inverse_params = _inverse_scheduling(before)
         dimension = "schedule"
     else:
@@ -100,12 +108,21 @@ async def execute(payload: dict) -> dict:
         after_state=None,
     )
 
-    url = url_scheme.build_update_url(
-        id=todo_id,
-        auth_token=auth_token,
-        **move_params,
-    )
-    await url_scheme.launch(url)
+    if dimension == "inbox":
+        safe_id = applescript.escape(todo_id)
+        script = (
+            f'tell application "Things3"\n'
+            f'    move to do id "{safe_id}" to list "Inbox"\n'
+            f'end tell'
+        )
+        await applescript.run_script(script)
+    else:
+        url = url_scheme.build_update_url(
+            id=todo_id,
+            auth_token=auth_token,
+            **move_params,
+        )
+        await url_scheme.launch(url)
 
     verified = await _poll_for_modified_advance(todo_id, pre_modified)
     undo_log.attach_target(entry_id, target_uuid=todo_id, after_state=verified)
@@ -153,12 +170,26 @@ async def undo(undo_entry: dict) -> dict:
         )
     pre_modified = current.get("modified") or ""
 
-    url = url_scheme.build_update_url(
-        id=target_uuid,
-        auth_token=auth_token,
-        **inverse_params,
-    )
-    await url_scheme.launch(url)
+    if inverse_params.get("to_inbox"):
+        if not config.ALLOW_APPLESCRIPT:
+            raise RuntimeError(
+                "Cannot undo move_todo back to Inbox without "
+                "THINGS_MCP_ALLOW_APPLESCRIPT=1. Set it and retry."
+            )
+        safe_id = applescript.escape(target_uuid)
+        script = (
+            f'tell application "Things3"\n'
+            f'    move to do id "{safe_id}" to list "Inbox"\n'
+            f'end tell'
+        )
+        await applescript.run_script(script)
+    else:
+        url = url_scheme.build_update_url(
+            id=target_uuid,
+            auth_token=auth_token,
+            **inverse_params,
+        )
+        await url_scheme.launch(url)
 
     await _poll_for_modified_advance(target_uuid, pre_modified)
     undo_log.delete(undo_entry["id"])
@@ -175,13 +206,13 @@ async def undo(undo_entry: dict) -> dict:
 
 
 def _inverse_scheduling(before_row: dict) -> dict[str, Any]:
-    """Compute the URL-scheme params that restore the original scheduling.
+    """Compute the params that restore the original scheduling.
 
     Cases:
     * Had a specific start_date → ``when=<YYYY-MM-DD>``.
     * Was in today/anytime/someday → ``when=<keyword>``.
-    * Was in Inbox or anywhere else → best-effort ``when=anytime``
-      (URL scheme doesn't accept ``when=inbox``).
+    * Was in Inbox → ``{"to_inbox": True}`` sentinel (requires AppleScript).
+    * Unknown → best-effort ``when=anytime``.
     """
     start_date = before_row.get("start_date")
     if start_date:
@@ -189,20 +220,27 @@ def _inverse_scheduling(before_row: dict) -> dict[str, Any]:
     start = (before_row.get("start") or "Anytime").lower()
     if start in _WHEN_KEYWORDS:
         return {"when": start}
-    # Inbox or unknown → Anytime is the closest the URL scheme allows.
+    if start == "inbox":
+        return {"to_inbox": True}
     return {"when": "anytime"}
 
 
 def _inverse_project(before_row: dict) -> dict[str, Any]:
-    """Compute the URL-scheme params that restore the original project.
+    """Compute the params that restore the original project membership.
 
-    If the task wasn't in any project before, undo sends ``list-id=`` (empty)
-    to clear the new project assignment. Things' behaviour on an empty
-    ``list-id`` is documented as a follow-up gap (#future-work).
+    Cases:
+    * Was in a project → ``list_id=<original_project_uuid>``.
+    * Was in Inbox (start="Inbox", no project) → ``{"to_inbox": True}``
+      sentinel (requires AppleScript on undo).
+    * Was unassigned/scheduled but not in any project → ``list_id=""``
+      (clears the new project assignment; task stays in its schedule).
     """
     original_project = before_row.get("project")
     if original_project:
         return {"list_id": original_project}
+    start = (before_row.get("start") or "").lower()
+    if start == "inbox":
+        return {"to_inbox": True}
     return {"list_id": ""}
 
 

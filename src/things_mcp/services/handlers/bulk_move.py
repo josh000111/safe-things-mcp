@@ -13,7 +13,7 @@ Requires ``THINGS_AUTH_TOKEN``. Always in :data:`config.NEVER_BYPASS_KINDS`.
 from __future__ import annotations
 
 from ... import config
-from .. import things_repo, url_scheme
+from .. import applescript, things_repo, url_scheme
 from ...state import undo_log
 from .move_todo import (
     _REJECT_KEYWORDS,
@@ -43,9 +43,15 @@ async def execute(payload: dict) -> dict:
 
     if target_lower in _REJECT_KEYWORDS:
         raise ValueError(
-            f"target={target!r} not supported by bulk_move in V2 first cut. "
-            "Supported: 'today', 'anytime', 'someday', or a project/area UUID. "
-            "Move-to-Inbox and specific-date moves are deferred."
+            f"target={target!r} not supported by bulk_move. "
+            "Supported: 'inbox' (requires THINGS_MCP_ALLOW_APPLESCRIPT=1), "
+            "'today', 'anytime', 'someday', or a project/area UUID."
+        )
+
+    if target_lower == "inbox" and not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "Bulk move to Inbox requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Set the environment variable and restart the MCP server."
         )
 
     auth_token = config.THINGS_AUTH_TOKEN
@@ -56,8 +62,11 @@ async def execute(payload: dict) -> dict:
             "then export THINGS_AUTH_TOKEN before retrying."
         )
 
+    is_inbox_move = target_lower == "inbox"
     is_scheduling_move = target_lower in _WHEN_KEYWORDS
-    dimension = "schedule" if is_scheduling_move else "project"
+    dimension = "inbox" if is_inbox_move else ("schedule" if is_scheduling_move else "project")
+
+    group_id = payload.get("group_id")
 
     items: list[dict] = []
     for uid in todo_ids:
@@ -67,9 +76,12 @@ async def execute(payload: dict) -> dict:
                 f"No to-do found with id={uid!r}. Bulk move aborts before "
                 "any mutation."
             )
-        if is_scheduling_move:
+        if is_inbox_move:
             inverse_params = _inverse_scheduling(row)
-            move_params: dict = {"when": target_lower}
+            move_params: dict = {}  # handled via AppleScript
+        elif is_scheduling_move:
+            inverse_params = _inverse_scheduling(row)
+            move_params = {"when": target_lower}
         else:
             inverse_params = _inverse_project(row)
             move_params = {"list_id": target}
@@ -90,15 +102,24 @@ async def execute(payload: dict) -> dict:
             "target": target,
         },
         after_state=None,
+        group_id=group_id,
     )
 
-    for item in items:
-        url = url_scheme.build_update_url(
-            id=item["target_uuid"],
-            auth_token=auth_token,
-            **item["move_params"],
+    if is_inbox_move:
+        lines = "\n".join(
+            f'    move to do id "{applescript.escape(it["target_uuid"])}" to list "Inbox"'
+            for it in items
         )
-        await url_scheme.launch(url)
+        script = f'tell application "Things3"\n{lines}\nend tell'
+        await applescript.run_script(script)
+    else:
+        for item in items:
+            url = url_scheme.build_update_url(
+                id=item["target_uuid"],
+                auth_token=auth_token,
+                **item["move_params"],
+            )
+            await url_scheme.launch(url)
 
     return {
         "action_kind": KIND,
@@ -125,10 +146,31 @@ async def undo(undo_entry: dict) -> dict:
             "retry."
         )
 
-    for item in before["items"]:
-        inverse_params = item.get("inverse_params") or {}
-        if not inverse_params:
-            continue
+    # Partition items: those restoring to Inbox (AppleScript) vs URL scheme.
+    inbox_items = [
+        it for it in before["items"]
+        if (it.get("inverse_params") or {}).get("to_inbox")
+    ]
+    url_items = [
+        it for it in before["items"]
+        if it not in inbox_items and (it.get("inverse_params") or {})
+    ]
+
+    if inbox_items:
+        if not config.ALLOW_APPLESCRIPT:
+            raise RuntimeError(
+                "Cannot undo bulk_move back to Inbox without "
+                "THINGS_MCP_ALLOW_APPLESCRIPT=1. Set it and retry."
+            )
+        lines = "\n".join(
+            f'    move to do id "{applescript.escape(it["target_uuid"])}" to list "Inbox"'
+            for it in inbox_items
+        )
+        script = f'tell application "Things3"\n{lines}\nend tell'
+        await applescript.run_script(script)
+
+    for item in url_items:
+        inverse_params = item["inverse_params"]
         url = url_scheme.build_update_url(
             id=item["target_uuid"],
             auth_token=auth_token,

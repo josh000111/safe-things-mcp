@@ -228,6 +228,7 @@ class ProposeBulkMoveInput(BaseModel):
     """V2 — propose moving N to-dos to a single target."""
     todo_ids: list[str] = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
+    group_id: str | None = Field(default=None)
 
 
 class ProposeBulkUpdateInput(BaseModel):
@@ -370,6 +371,21 @@ class ProposeApplyAiTagsInput(BaseModel):
 class ProposeCleanupAiTagsInput(BaseModel):
     """V2 — propose cleaning up transient AI routing tags after a confirmed sort."""
     todo_uuids: list[str] = Field(..., min_length=1)
+    group_id: str | None = Field(default=None)
+
+
+class ProposeMoveUnderAiHeadingInput(BaseModel):
+    """V2 — move to-dos into an existing project under the __NEWLY ADDED BY AI__ marker.
+
+    Creates the marker if absent (idempotent — reuses it if already present).
+    Reorders the project so pre-existing tasks appear above the marker and
+    newly moved tasks appear below it. Safe to call multiple times for the
+    same project; successive batches append under the marker.
+
+    Requires ``THINGS_AUTH_TOKEN`` and ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    todo_ids: list[str] = Field(..., min_length=1)
+    project_id: str = Field(..., min_length=1)
     group_id: str | None = Field(default=None)
 
 

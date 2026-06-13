@@ -67,6 +67,20 @@ def attach_target(
     return cur.rowcount > 0
 
 
+def update_before_state(entry_id: str, before_state: dict[str, Any]) -> bool:
+    """Replace before_state on an existing row.
+
+    Used after find-or-create steps to patch in values (e.g. marker_uuid,
+    marker_created) that were unknown at the time the row was first written.
+    """
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE undo_log SET before_state_json = ? WHERE id = ?",
+            (json.dumps(before_state), entry_id),
+        )
+    return cur.rowcount > 0
+
+
 def delete(entry_id: str) -> bool:
     """Remove a single undo_log row. Used after a successful undo so the
     same action can't be undone twice."""

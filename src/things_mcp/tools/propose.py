@@ -42,6 +42,7 @@ from ..models import (
     ProposeDeleteTodoInput,
     ProposeManageAiTagInput,
     ProposeMoveTodoInput,
+    ProposeMoveUnderAiHeadingInput,
     ProposeUpdateHeadingInput,
     ProposeUpdateProjectInput,
     ProposeUpdateTodoInput,
@@ -129,25 +130,21 @@ async def propose_move_todo(todo_id: str, target: str) -> dict:
     """Propose moving a to-do to a different list or project.
 
     ``target`` is one of:
+    * ``"inbox"`` — move to Inbox via AppleScript (requires
+      ``THINGS_MCP_ALLOW_APPLESCRIPT=1``). Undo restores the original
+      scheduling; if the task was already in Inbox before the move it
+      uses AppleScript to restore it there.
     * ``"today"`` / ``"anytime"`` / ``"someday"`` — change scheduling
       (preserves project/area membership).
     * A project/area UUID — change membership (preserves scheduling).
 
-    Requires ``THINGS_AUTH_TOKEN``. Move-to-Inbox and specific-date moves
-    are deferred to a follow-up.
+    Requires ``THINGS_AUTH_TOKEN``.
     """
-    target_lower = target.lower() if target else target
-    if target_lower == "inbox":
-        raise ValueError(
-            "target='inbox' is not supported in V2 first cut. "
-            "Use 'today', 'anytime', 'someday', or a project/area UUID."
-        )
-    if target_lower == "upcoming":
+    if target and target.lower() == "upcoming":
         raise ValueError(
             "target='upcoming' is a computed view in Things, not a move "
             "destination. To schedule a task for a future date that appears "
-            "in Upcoming, update the to-do with `when='<YYYY-MM-DD>'` "
-            "(specific-date moves arrive in a follow-up)."
+            "in Upcoming, update the to-do with `when='<YYYY-MM-DD>'`."
         )
     payload_model = ProposeMoveTodoInput(todo_id=todo_id, target=target)
     payload = payload_model.model_dump()
@@ -281,27 +278,33 @@ async def propose_bulk_cancel(todo_ids: list[str]) -> dict:
     )
 
 
-async def propose_bulk_move(todo_ids: list[str], target: str) -> dict:
+async def propose_bulk_move(
+    todo_ids: list[str],
+    target: str,
+    group_id: str | None = None,
+) -> dict:
     """Propose moving N to-dos to a single target.
 
     ``target`` follows the same rules as :func:`propose_move_todo`:
-    ``today`` / ``anytime`` / ``someday`` for scheduling, or a
-    project/area UUID for membership. **Never auto-confirmed.**
+    * ``"inbox"`` — move to Inbox via AppleScript (requires
+      ``THINGS_MCP_ALLOW_APPLESCRIPT=1``).
+    * ``"today"`` / ``"anytime"`` / ``"someday"`` — scheduling move.
+    * A project/area UUID — membership move.
+
+    ``group_id`` — pass the same group_id used in
+    ``propose_apply_ai_tags`` and ``propose_cleanup_ai_tags`` to keep
+    the undo group linked so ``undo_group(group_id)`` can reverse the
+    entire sort atomically.
+
+    **Never auto-confirmed.**
     """
-    target_lower = target.lower() if target else target
-    if target_lower == "inbox":
-        raise ValueError(
-            "target='inbox' is not supported in V2 first cut. "
-            "Use 'today', 'anytime', 'someday', or a project/area UUID."
-        )
-    if target_lower == "upcoming":
+    if target and target.lower() == "upcoming":
         raise ValueError(
             "target='upcoming' is a computed view in Things, not a move "
             "destination. To schedule tasks for a future date that appears "
-            "in Upcoming, use propose_bulk_update with `when` (arrives in a "
-            "follow-up)."
+            "in Upcoming, use propose_bulk_update with `when`."
         )
-    payload_model = ProposeBulkMoveInput(todo_ids=todo_ids, target=target)
+    payload_model = ProposeBulkMoveInput(todo_ids=todo_ids, target=target, group_id=group_id)
     payload = payload_model.model_dump()
     preview = handlers.bulk_move.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -402,8 +405,8 @@ async def propose_add_heading(
     underscores) inside the project. This is a URL-scheme-only workaround —
     position via ``after_todo_id`` is accepted but NOT honored (ordering
     requires AppleScript, arriving in step 5). The dummy task is visible
-    in Things as a regular to-do (with underscores). Use
-    ``convert_dummy_to_native_heading`` (step 6) to upgrade it later.
+    in Things as a regular to-do (with underscores). Native heading
+    conversion is not currently supported.
 
     Undo cancels the dummy task (moves to Logbook). Requires ``THINGS_AUTH_TOKEN`` only
     for undo.
@@ -577,6 +580,53 @@ async def propose_replace_checklist(todo_id: str, items: list[str]) -> dict:
     preview = _replace_checklist.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=_replace_checklist.KIND, payload=payload, preview=preview
+    )
+
+
+# ---------- AI sort — move under marker ----------
+
+
+async def propose_move_under_ai_heading(
+    todo_ids: list[str],
+    project_id: str,
+    group_id: str | None = None,
+) -> dict:
+    """Propose moving to-dos into an existing project under ``__NEWLY ADDED BY AI__``.
+
+    Creates the ``__NEWLY ADDED BY AI__`` marker heading inside the project if it
+    does not already exist, then moves all ``todo_ids`` into the project and
+    reorders so pre-existing tasks appear **above** the marker and newly moved
+    tasks appear **below** it.
+
+    Idempotent with respect to the marker — calling this multiple times for the
+    same project reuses the existing marker and appends new tasks under it (after
+    any tasks placed by earlier calls).
+
+    The marker itself is silently filtered out if accidentally included in
+    ``todo_ids``.
+
+    Use this instead of plain ``propose_bulk_move`` when moving tasks into an
+    **existing** project during a sort — the marker lets the user distinguish
+    AI-placed tasks from tasks that were already there.
+
+    ``group_id`` — pass the same group_id used in ``propose_apply_ai_tags`` and
+    ``propose_bulk_move`` to keep the undo group linked for ``undo_group``.
+
+    **Never auto-confirmed.** Requires ``THINGS_AUTH_TOKEN`` and
+    ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_move_under_ai_heading requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Set the environment variable and restart the MCP server."
+        )
+    payload_model = ProposeMoveUnderAiHeadingInput(
+        todo_ids=todo_ids, project_id=project_id, group_id=group_id
+    )
+    payload = payload_model.model_dump()
+    preview = handlers.move_under_heading.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.move_under_heading.KIND, payload=payload, preview=preview
     )
 
 
@@ -839,6 +889,7 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_prepend_checklist_items)
     mcp.tool()(propose_replace_checklist)
     mcp.tool()(propose_reorder_todos)
+    mcp.tool()(propose_move_under_ai_heading)
     mcp.tool()(propose_create_ai_tag)
     mcp.tool()(propose_manage_ai_tag)
     mcp.tool()(propose_delete_ai_tag)

@@ -44,6 +44,7 @@ NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
     "bulk_update",
     "replace_checklist",  # destructive overwrite of entire checklist
     "delete_ai_tag",    # removes tag from ALL tasks — must always confirm
+    "move_under_ai_heading",  # bulk move + reorder — must always confirm
 })
 
 WRITE_POLL_TIMEOUT_SECONDS = float(
