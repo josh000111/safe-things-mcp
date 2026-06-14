@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 from ... import config
 from .. import things_repo, url_scheme
-from ...state import undo_log
+from ...state import sort_session, undo_log
 
 KIND = "add_project"
 
@@ -71,6 +71,10 @@ async def execute(payload: dict) -> dict:
     undo_log.attach_target(
         entry_id, target_uuid=verified["uuid"], after_state=verified
     )
+    # An AI-created project is never "user-curated", so a later sort move into
+    # it must NOT get the __NEWLY ADDED BY AI__ marker. Record it so
+    # propose_bulk_move's auto-promote excludes it.
+    sort_session.register_created_project(verified["uuid"])
 
     return {
         "action_kind": KIND,

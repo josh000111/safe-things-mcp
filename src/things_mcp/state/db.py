@@ -51,6 +51,30 @@ CREATE INDEX IF NOT EXISTS idx_ai_tag_routing_tag_name
 
 CREATE INDEX IF NOT EXISTS idx_ai_tag_routing_todo_uuid
     ON ai_tag_routing(todo_uuid);
+
+CREATE TABLE IF NOT EXISTS sort_session (
+    group_id   TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    active     INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS sort_session_tagged (
+    group_id  TEXT NOT NULL,
+    todo_uuid TEXT NOT NULL,
+    PRIMARY KEY (group_id, todo_uuid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sort_session_tagged_group
+    ON sort_session_tagged(group_id);
+
+CREATE TABLE IF NOT EXISTS sort_session_project (
+    group_id     TEXT NOT NULL,
+    project_uuid TEXT NOT NULL,
+    PRIMARY KEY (group_id, project_uuid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sort_session_project_group
+    ON sort_session_project(group_id);
 """
 
 

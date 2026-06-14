@@ -47,8 +47,22 @@ from ..models import (
     ProposeUpdateProjectInput,
     ProposeUpdateTodoInput,
 )
-from ..services import handlers, url_scheme
-from ..state import pending
+from ..services import handlers, things_repo, url_scheme
+from ..state import pending, sort_session
+
+# Move targets that are NOT a project/area UUID (keywords + computed views).
+_NON_LIST_TARGETS = {"inbox", "today", "anytime", "someday", "upcoming"}
+
+
+def _targets_existing_user_project(target: str) -> bool:
+    """True if ``target`` is a pre-existing user project (not a keyword, area,
+    or AI-created sort project) — i.e. a move into it should land under the
+    ``__NEWLY ADDED BY AI__`` marker."""
+    if not target or target.strip().lower() in _NON_LIST_TARGETS:
+        return False
+    if sort_session.is_ai_created(target):
+        return False
+    return things_repo.project(target) is not None
 
 
 # ---------- module-level tool functions (testable without FastMCP) ----------
@@ -187,6 +201,7 @@ async def propose_add_project(
     notes: str | None = None,
     tags: list[str] | None = None,
     headings: list[str] | None = None,
+    member_todo_ids: list[str] | None = None,
 ) -> dict:
     """Propose adding a new Things project.
 
@@ -197,7 +212,31 @@ async def propose_add_project(
 
     Undo cancels the created project (canceled+completed → Logbook).
     Undo requires ``THINGS_AUTH_TOKEN`` even though execute does not.
+
+    **Sort-session contract:** when a sort session is active,
+    ``member_todo_ids`` MUST be provided and contain at least 3 task UUIDs
+    (the tasks that will go into this project).  If fewer than 3 are
+    supplied, the call is rejected with a validation error and the agent
+    must instead tag those tasks with ``*Unclear*`` rather than creating a
+    project for a sub-threshold cluster.  When no sort is active this
+    parameter is optional and no size check is applied, so normal
+    (non-sort) project creation is unaffected.
     """
+    # Enforce the >=3 member guard during an active sort session.
+    if sort_session.active() is not None:
+        count = len(member_todo_ids) if member_todo_ids else 0
+        if count < 3:
+            return {
+                "validation_error": True,
+                "message": (
+                    f"A sort session is active but only {count} task(s) were "
+                    "provided in member_todo_ids (minimum 3 required). "
+                    "Do NOT create this project. Instead tag the task(s) with "
+                    "*Unclear* (routing=null, transient=false) and let the user "
+                    "decide whether a project is warranted."
+                ),
+            }
+
     url_scheme.validate_tags(tags)
     payload_model = ProposeAddProjectInput(
         title=title,
@@ -303,6 +342,20 @@ async def propose_bulk_move(
             "target='upcoming' is a computed view in Things, not a move "
             "destination. To schedule tasks for a future date that appears "
             "in Upcoming, use propose_bulk_update with `when`."
+        )
+    # A bulk_move counts as part of the sort only when every task being moved was
+    # tagged by the active sort. This prevents an unrelated bulk_move (untagged
+    # tasks) from inheriting the sort group or getting the __NEWLY ADDED BY AI__
+    # marker if a sort was left open without cleanup.
+    sort_move = sort_session.is_sort_move(todo_ids)
+    if group_id is None and sort_move:
+        group_id = sort_session.active()
+    # During a sort, a move of sort-member tasks into a pre-existing user project
+    # must land under the marker — auto-promote to the heading path so the audit
+    # marker is enforced in code, not left to the agent's tool choice.
+    if sort_move and _targets_existing_user_project(target):
+        return await propose_move_under_ai_heading(
+            todo_ids=todo_ids, project_id=target, group_id=group_id
         )
     payload_model = ProposeBulkMoveInput(todo_ids=todo_ids, target=target, group_id=group_id)
     payload = payload_model.model_dump()
@@ -620,6 +673,8 @@ async def propose_move_under_ai_heading(
             "propose_move_under_ai_heading requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
+    if group_id is None:
+        group_id = sort_session.active()
     payload_model = ProposeMoveUnderAiHeadingInput(
         todo_ids=todo_ids, project_id=project_id, group_id=group_id
     )
@@ -773,6 +828,11 @@ async def propose_apply_ai_tags(
         raise RuntimeError(
             "propose_apply_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
+    # apply_ai_tags is the sort anchor: open a session so every later sort tool
+    # inherits this group_id even if the agent never threads one through. A
+    # server-owned id guarantees undo_group can reverse the whole run.
+    group_id = sort_session.begin(group_id)
+    sort_session.register_tagged(item.get("todo_uuid") for item in items)
     payload_model = ProposeApplyAiTagsInput(items=items, group_id=group_id)
     payload = payload_model.model_dump()
     preview = handlers.apply_ai_tags.make_preview(payload)
@@ -806,12 +866,18 @@ async def propose_cleanup_ai_tags(
         raise RuntimeError(
             "propose_cleanup_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
+    if group_id is None:
+        group_id = sort_session.active()
     payload_model = ProposeCleanupAiTagsInput(todo_uuids=todo_uuids, group_id=group_id)
     payload = payload_model.model_dump()
     preview = handlers.cleanup_ai_tags.make_preview(payload)
-    return await _enqueue_and_maybe_auto_confirm(
+    result = await _enqueue_and_maybe_auto_confirm(
         kind=handlers.cleanup_ai_tags.KIND, payload=payload, preview=preview
     )
+    # cleanup is the final sort step — close the session so later standalone
+    # moves are not auto-grouped or auto-marked.
+    sort_session.end()
+    return result
 
 
 # ---------- shared helper ----------
