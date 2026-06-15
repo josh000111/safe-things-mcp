@@ -1,6 +1,6 @@
 # things-mcp Sort Quality — Mission Control
 
-**Purpose:** single source of truth for the iterative loop that improves the AI
+**Purpose:** single source of truth for the iterative loop that improves the things-mcp AI
 inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
@@ -12,7 +12,7 @@ rely on a long-lived chat session — durable state lives here and in
 ## North-star metric (DECIDED 2026-06-14)
 
 **Precision-first, NOT strict-answer-key match.** A confidently *wrong* placement
-is the only true failure — it erodes trust and creates hunt-the-task work.
+is the only true failure — it erodes user trust and creates manual hunt-for-the-task work for the user.
 Abstaining (leaving a task in the Inbox with an explanatory tag) is graceful
 degradation, not a failure. An Inbox with 12 tasks left and zero misplacements
 beats an empty Inbox with 4 misplacements.
@@ -108,3 +108,37 @@ add_projects → 1 apply_ai_tags) via `undo(undo_id)`, then deleted the 2 strays
 - `test5-answer-key.md` — scoring key (**DO NOT load in a blind-run session**).
 - `test5-scoring-template.md` — copy per scored run.
 - `eval-ledger.md` — append-only results.
+
+---
+
+## Session playbook (one fresh session per phase — copy-paste the opener)
+
+**Manual steps only the human can do:** commit (`.git` is owned by joshsmith —
+Test can't write it), restart the MCP server (Claude Desktop manages it), start
+each fresh session with its opener, ensure ONE session at a time (concurrent runs
+collide on the shared DB), trigger the blind run.
+
+**Agent-handled once pointed at the docs:** scoring vs. key, ledger append,
+backlog status, fixture reset (as Test), code changes (via coder-sonnet).
+
+### Session A — Blind run (MUST stay blind)
+> Run the inbox sort in `tests-2/test5-blind-prompt.txt`. Follow it exactly. Do
+> NOT read any other `tests-2/` files.
+
+⚠️ Never let Session A read the answer key, scoring template, this file, the
+ledger, or any verification doc — they reveal the expected answers.
+
+### Session B — Scoring (may use the key)
+> Score the inbox sort just run. Read `MISSION-CONTROL.md` (metric defs + loop),
+> `test5-answer-key.md`, `test5-scoring-template.md`. Read live Things state via
+> things-mcp, fill `test5-verification-<today>.md` from the template, append one
+> row to `eval-ledger.md`, and set BACKLOG status in MISSION-CONTROL.
+
+### Session C — Dev (one backlog item)
+> Read `MISSION-CONTROL.md` and `eval-ledger.md`. Implement the next TODO backlog
+> item. Delegate code to coder-sonnet, run the gates (`uv run pytest`, `--help`,
+> `health()`), mark it READY-TO-TEST, and tell me to commit + restart.
+
+### Between cycles (human)
+Commit the change → restart the MCP server → ask the agent to reset the fixture
+(Fixture section) → start Session A again.
