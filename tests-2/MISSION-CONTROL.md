@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-15 (post-run-3 scoring)
+**Last updated:** 2026-06-15 (post-run-4 scoring)
 
 ---
 
@@ -58,11 +58,12 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 - **<3-task project guard** in `propose_add_project` (`member_todo_ids >= 3`
   during a sort) — **LIVE & smoke-verified.**
 - Agent files (`~/.claude/agents/`) model aliases fixed.
-- ✅ Fix committed (HEAD `7bb8853`) and confirmed live: `sort_session` table exists
-  in state DB. Run 3 (2026-06-15) revealed a **bypass gap**: agent skipped
-  `propose_apply_ai_tags`, so no sort session was opened and group_id stayed null.
-  Fix only initialises via `apply_ai_tags`; `bulk_move` inherits but does not create.
-  **New BACKLOG item:** auto-init the session on the first `propose_bulk_move` call.
+- ✅ Fix committed (HEAD `73c26a0`) and confirmed live: auto-init on first
+  `propose_bulk_move` (BACKLOG #1a). Run 4 (2026-06-15 18:11 UTC) shows
+  group_id = "sort-inbox-20260615" across all bulk_move + apply_ai_tags entries.
+  **First run with non-null group_id.** Confident-wrong: 2 (best to date).
+  Remaining north-star issues: #8 over-committed (abstain miss), #26 over-abstained,
+  AI-heading still absent (separate Class B gap).
 
 ---
 
@@ -71,7 +72,7 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 | # | Change | Type | Status | Hypothesis (metric it should move) |
 |---|--------|------|--------|-----------------------------------|
 | 1 | group_id DB-persistence + AI-heading robustness | code invariant | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
-| 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | READY-TO-TEST | closes bypass gap where agent skips apply_ai_tags entirely |
+| 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
 | 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
 | 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | TODO | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
 | 4 | Two-pass router→skeptic abstention | architecture | TODO | confident-wrong → 0 (demote unevidenced placements to abstain) |
@@ -84,16 +85,29 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 
 **Pristine** = 30 test tasks in Inbox (canonical list: `test5-answer-key.md` /
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
-projects.
+projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-15 post-run-3): NEEDS RESET.**
-Run 3 completed: 12 cooking tasks moved to Recipe App, 3 singletons to Personal
-area, 6 tasks remain in Inbox with abstain tags. No new projects were created.
-group_id is null throughout → undo_group cannot be used; will need to undo
-individual log entries (4 bulk_moves + 3 bulk_updates, timestamps ~13:26 UTC)
-via `undo(undo_id)` newest-first, then move singletons back to Inbox.
+**Current state (2026-06-15 post-run-4): NEEDS RESET.**
+Run 4 complete. Two new projects (Make Carbonara, Bake Sponge Cake) need deletion;
+tasks need returning to Inbox; abstain tags on #25/#26 need stripping; shuffle required.
 
-Also remove the *Unclear*/*Ambiguous Home*/*Duplicate?* tags added by apply_ai_tags.
+**Fixture reset procedure (for future runs):**
+
+1. Call `recent_undo_log()` and identify the bulk_moves + bulk_updates from the
+   completed run. Note their undo_ids.
+2. Undo each entry **newest-first** via `undo(undo_id)`. group_id is often null
+   (bypass gap — BACKLOG #1a), so `undo_group()` may not work; undo individually.
+3. Verify all 30 tasks are back in Inbox (`list_inbox`, cross-check against
+   `test5-answer-key.md`). Re-add any that were deleted rather than moved.
+4. Strip any remaining abstain tags (*Unclear*, *Ambiguous Home*, *Duplicate?*)
+   via `propose_cleanup_ai_tags` or `propose_bulk_update` + `confirm_action`.
+5. Confirm no AI-created projects remain (`get_projects`).
+6. **Shuffle the Inbox** — tasks are always restored in cluster order (all cooking
+   together, all Freelance together, etc.) which makes the sort trivially easy.
+   Call `propose_reorder_todos(container="inbox", new_order=[…])` with the UUIDs
+   in an interleaved order (no two tasks from the same thematic cluster adjacent).
+   Obtain UUIDs from `list_inbox`; generate a shuffled order that alternates
+   across: Carbonara, Baking, Freelance, Apartment, Recipe App, and singletons/ambiguous.
 
 Reset is **not yet automated** (BACKLOG #3).
 
