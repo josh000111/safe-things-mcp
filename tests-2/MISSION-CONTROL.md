@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-15
+**Last updated:** 2026-06-15 (post-run-3 scoring)
 
 ---
 
@@ -58,8 +58,11 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 - **<3-task project guard** in `propose_add_project` (`member_todo_ids >= 3`
   during a sort) — **LIVE & smoke-verified.**
 - Agent files (`~/.claude/agents/`) model aliases fixed.
-- ⚠️ The fix is in the **working tree, uncommitted** (HEAD `fa62ede`). **Commit
-  before the baseline run** so the ledger can pin a SHA.
+- ✅ Fix committed (HEAD `7bb8853`) and confirmed live: `sort_session` table exists
+  in state DB. Run 3 (2026-06-15) revealed a **bypass gap**: agent skipped
+  `propose_apply_ai_tags`, so no sort session was opened and group_id stayed null.
+  Fix only initialises via `apply_ai_tags`; `bulk_move` inherits but does not create.
+  **New BACKLOG item:** auto-init the session on the first `propose_bulk_move` call.
 
 ---
 
@@ -67,8 +70,9 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 
 | # | Change | Type | Status | Hypothesis (metric it should move) |
 |---|--------|------|--------|-----------------------------------|
-| 1 | group_id DB-persistence + AI-heading robustness | code invariant | DONE — smoke-verified; awaiting blind confirm | group_id non-null 100%; heading present 100% |
-| 2 | <3-task project guard | code invariant | DONE — smoke-verified | kills spurious sub-3 projects (e.g. Eco Packaging) |
+| 1 | group_id DB-persistence + AI-heading robustness | code invariant | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
+| 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | READY-TO-TEST | closes bypass gap where agent skips apply_ai_tags entirely |
+| 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
 | 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | TODO | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
 | 4 | Two-pass router→skeptic abstention | architecture | TODO | confident-wrong → 0 (demote unevidenced placements to abstain) |
 | 5 | Abstain-vs-guess instruction tuning (#5/#8/#28/#26) | prose | TODO (after baseline) | abstain-recall up without tanking routing |
@@ -82,16 +86,16 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects.
 
-**Current state (2026-06-15): PRISTINE — reset complete, ready for the blind run.**
-All 30 fixture tasks in the Inbox, untagged; #26 (`Research eco packing
-materials`) notes + deadline 2026-07-15 intact; the 3 AI-created projects
-cancelled to Logbook; strays removed; state-DB tracking tables (`sort_session*`,
-`ai_tag_routing`) cleared. The fix is LIVE (smoke-verified).
+**Current state (2026-06-15 post-run-3): NEEDS RESET.**
+Run 3 completed: 12 cooking tasks moved to Recipe App, 3 singletons to Personal
+area, 6 tasks remain in Inbox with abstain tags. No new projects were created.
+group_id is null throughout → undo_group cannot be used; will need to undo
+individual log entries (4 bulk_moves + 3 bulk_updates, timestamps ~13:26 UTC)
+via `undo(undo_id)` newest-first, then move singletons back to Inbox.
 
-Reset is **not yet automated** (BACKLOG #3). Method used this time: Run-2 moves
-had null group_id (pre-fix) so `undo_group` couldn't reverse them — instead undid
-Run 2's 11 individual undo-log entries newest-first (7 bulk_moves → 3
-add_projects → 1 apply_ai_tags) via `undo(undo_id)`, then deleted the 2 strays.
+Also remove the *Unclear*/*Ambiguous Home*/*Duplicate?* tags added by apply_ai_tags.
+
+Reset is **not yet automated** (BACKLOG #3).
 
 ---
 

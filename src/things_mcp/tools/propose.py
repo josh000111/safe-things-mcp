@@ -330,7 +330,9 @@ async def propose_bulk_move(
     * ``"today"`` / ``"anytime"`` / ``"someday"`` — scheduling move.
     * A project/area UUID — membership move.
 
-    ``group_id`` — pass the same group_id used in
+    ``group_id`` — if no sort session is active, one is started automatically
+    so that ``group_id`` is always non-null in the undo log.  Pass the same
+    group_id used in
     ``propose_apply_ai_tags`` and ``propose_cleanup_ai_tags`` to keep
     the undo group linked so ``undo_group(group_id)`` can reverse the
     entire sort atomically.
@@ -343,13 +345,13 @@ async def propose_bulk_move(
             "destination. To schedule tasks for a future date that appears "
             "in Upcoming, use propose_bulk_update with `when`."
         )
-    # A bulk_move counts as part of the sort only when every task being moved was
-    # tagged by the active sort. This prevents an unrelated bulk_move (untagged
-    # tasks) from inheriting the sort group or getting the __NEWLY ADDED BY AI__
-    # marker if a sort was left open without cleanup.
+    # Auto-init: ensure a sort session is open so group_id is always
+    # non-null in the undo log, even when the agent skips
+    # propose_apply_ai_tags.  Do NOT register todo_ids here — is_sort_move()
+    # must remain gated on explicit tagging via propose_apply_ai_tags so that
+    # unrelated bulk_moves are not promoted to the heading path.
+    group_id = sort_session.begin(group_id)
     sort_move = sort_session.is_sort_move(todo_ids)
-    if group_id is None and sort_move:
-        group_id = sort_session.active()
     # During a sort, a move of sort-member tasks into a pre-existing user project
     # must land under the marker — auto-promote to the heading path so the audit
     # marker is enforced in code, not left to the agent's tool choice.
