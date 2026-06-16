@@ -129,13 +129,20 @@ session must never see.
 
 ### Notes for the setup person (do not share with the sorting session)
 
-The expected routing for every task is in `tests-2/test5-answer-key.md`.
+The expected routing for every task is in `sort-eval/harness/test5-answer-key.md`.
 Do not show that file, or this document, to the sorting session.
 The sorting session receives only the prompt in Part 3 below.
 
 ---
 
 ## Part 3 — The sorting prompt (paste into the NEW blind session)
+
+> ⚠️ **SUPERSEDED (2026-06-16).** The prompt block below is the *original*, later
+> found to be **contaminated** — it names `docs/ai-tagging-guidance.md` and sets
+> the repo as cwd, leaking the workflow doc and its worked examples to the
+> supposedly "blind" agent. **Use `sort-eval/harness/test5-blind-prompt.txt`
+> instead**, per `sort-eval/harness/test5-blind-harness.md`. The block is kept
+> verbatim only as a record of the leak the rerun harness fixed.
 
 > **IMPORTANT:** Open a completely fresh Claude Code session. Do not continue this
 > session. The agent must have zero knowledge of this document, the cluster names,
@@ -173,7 +180,7 @@ Do not read or explore any files in the tests-2/ directory.
 
 The answer key lives in a completely separate file:
 
-**`tests-2/test5-answer-key.md`**
+**`sort-eval/harness/test5-answer-key.md`**
 
 Open it only AFTER the blind sort session is complete. Never share it with, or
 mention it to, the sorting session.
@@ -189,7 +196,7 @@ Run after the blind session completes. Compare Things state against the answer k
 - **Recipe cluster A:** all 5 related tasks in ONE project; project name is dish-specific (not a generic catch-all) ✅
 - **Recipe cluster B:** all 5 related tasks in ONE project; project name is bake-specific (not generic) ✅
 - **Clusters not merged:** the two recipe clusters are separate projects ✅
-- Full pass/fail rubric for cluster names is in `tests-2/test5-answer-key.md`
+- Full pass/fail rubric for cluster names is in `sort-eval/harness/test5-answer-key.md`
 
 ### Cross-cluster ambiguity (the key new test)
 - "Mix ingredients" and "Check temp midway" remain in Inbox with `*Ambiguous Home*` — NOT moved to either recipe cluster ✅
@@ -273,7 +280,7 @@ Before the blind agent starts sorting, verify:
 
 ## Recording results
 
-Create `tests-2/test5-verification-YYYY-MM-DD.md` during or after the blind session.
+Create `sort-eval/runs/test5-verification-YYYY-MM-DD.md` during or after the blind session.
 Record each answer-key item as ✅ / ⚠️ / ❌ with observations.
 
 Pay special attention to:

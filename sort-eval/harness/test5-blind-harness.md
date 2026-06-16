@@ -68,7 +68,7 @@ guidance. If you skip this, you are testing the old instructions.
    tagging tools need it).
 4. Paste the prompt from **`test5-blind-prompt.txt`** verbatim as the opening
    message. It contains no file paths, no working-dir hint, no `uv` instruction,
-   and no reference to any workflow doc or the `tests-2/` directory — the agent
+   and no reference to any workflow doc or the `sort-eval/` directory — the agent
    must rely solely on the injected `instructions=`.
 5. Do not coach the agent. Approve its new-project list when it asks (that is the
    one interaction the prompt invites), but do not steer naming or routing.
@@ -76,7 +76,7 @@ guidance. If you skip this, you are testing the old instructions.
 What makes this blind, checklist:
 - [ ] Session cwd is the testing folder, not the repo
 - [ ] Agent cannot read `docs/ai-tagging-guidance.md` (outside its cwd)
-- [ ] Agent cannot read `tests-2/` (answer key, this file)
+- [ ] Agent cannot read `sort-eval/` (answer key, this file)
 - [ ] MCP server restarted so new `instructions=` is live
 - [ ] Prompt is the verbatim `test5-blind-prompt.txt`
 

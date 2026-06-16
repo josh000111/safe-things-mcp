@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-15 (post-run-4 scoring)
+**Last updated:** 2026-06-16 (post-run-5 scoring + first-principles review; docs reorganized into `sort-eval/`)
 
 ---
 
@@ -17,13 +17,22 @@ Abstaining (leaving a task in the Inbox with an explanatory tag) is graceful
 degradation, not a failure. An Inbox with 12 tasks left and zero misplacements
 beats an empty Inbox with 4 misplacements.
 
-Track two numbers per run:
+Track three numbers per run:
 - **Confident-wrong count** → drive to **0**.
 - **Abstain-recall** = of the genuinely ambiguous tasks, % correctly left in the
   Inbox with an abstain tag.
+- **Coverage / yield** = of the tasks that DO have a confident home (the
+  unambiguous majority + the well-evidenced clusters), % actually placed.
+
+⚠️ **Refinement (2026-06-16): confident-wrong is gameable by inaction.** A sort
+that places *nothing* scores confident_wrong = 0 and high abstain-recall — yet is
+useless. Run 5 is close to this failure mode (0 clusters created, 10 cluster
+tasks left untagged in the Inbox, cw = 0). Precision-first still holds — a wrong
+placement is worse than an abstain — but **abstaining has a cost too.** Read the
+three numbers together: drive cw→0 *without* letting coverage collapse.
 
 Routing accuracy on the unambiguous majority is secondary (should stay ~95%+).
-Rationale + full analysis: `test5-verification-2026-06-14.md`.
+Rationale + full analysis: `sort-eval/runs/test5-verification-2026-06-14.md`.
 
 ---
 
@@ -38,11 +47,18 @@ Rationale + full analysis: `test5-verification-2026-06-14.md`.
 3. **RESET FIXTURE**: restore the pristine 30-task Inbox (see Fixture section);
    remove stray tasks.
 4. **BLIND RUN** (fresh session, **NO answer key**): run `test5-blind-prompt.txt`.
-5. **SCORE** (fresh session, HAS key): fill a copy of `test5-scoring-template.md`
-   → `test5-verification-<date>.md`; append one row to `eval-ledger.md`; set the
-   BACKLOG item to **KEPT** or **REVERTED** based on whether confident-wrong /
-   abstain-recall improved.
-6. Next crank.
+5. **SCORE** (fresh session, HAS key): run `uv run things-mcp-score --pretty`;
+   fill a copy of `sort-eval/harness/test5-scoring-template.md` →
+   `sort-eval/runs/test5-verification-<date>.md`; append one row to
+   `sort-eval/harness/eval-ledger.md`.
+6. **JUDGE vs the noise floor, NOT vs one prior run.** ⚠️ Runs 4 and 5 ran
+   *identical* sorting code yet diverged by the full size of the metrics
+   (2 clusters → 0; cw 2 → 0). A single before/after run cannot distinguish a
+   real effect from sampling noise. Set a BACKLOG item to **KEPT/REVERTED** only
+   when the change moves a metric **beyond the run-to-run spread** measured by the
+   noise-floor baseline (BACKLOG #3a). Until that baseline exists, treat single
+   runs as anecdotes.
+7. Next crank.
 
 **Rules:** ONE test at a time against the Test Things DB — concurrent
 sessions/runs collide on the shared DB and corrupt the fixture (observed: stray
@@ -62,16 +78,29 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
   `propose_bulk_move` (BACKLOG #1a). Run 4 (2026-06-15 18:11 UTC) shows
   group_id = "sort-inbox-20260615" across all bulk_move + apply_ai_tags entries.
   **First run with non-null group_id.** Confident-wrong: 2 (best to date).
-  Remaining north-star issues: #8 over-committed (abstain miss), #26 over-abstained,
-  AI-heading still absent (separate Class B gap).
+- ✅ Eval harness (BACKLOG #3) committed (HEAD `3589494`) and live. Run 5
+  (2026-06-16) scored programmatically: **confident_wrong = 0**, abstain_recall
+  4/5 (80%) — BUT **zero new projects created**, both cooking clusters left
+  untagged in the Inbox (#26 over-abstained again; #8 missing its tag). Existing-
+  project routing solid (9/10).
+- ⚠️ **First-principles finding (2026-06-16): runs 4 and 5 are the SAME build.**
+  The only code between them (`73c26a0`→`3589494`) was the read-only eval harness,
+  which never executes during a sort; the blind prompt was unchanged. So the
+  2-clusters→0 / cw 2→0 swing is **run-to-run LLM variance, not a regression.**
+  Consequence: the programmatic *scorer* is deterministic, but a **single run is
+  NOT a deterministic baseline** of the system. The clean baseline is still
+  **PENDING** — it requires the #3a repeat-run measurement.
+- 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
+  (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
+  in `scorer.py`.
 
 ---
 
-## BACKLOG #3 — what shipped (READY-TO-TEST, awaiting commit + restart)
+## BACKLOG #3 — what shipped (KEPT — programmatic scorer in use)
 
-Programmatic eval harness, all unit-tested + gates green (pytest 521 passed/1 skipped, ruff clean, `--help` ok, live read-only scorer smoke-run works). **Uncommitted** — joshsmith must commit, then restart MCP server.
+Programmatic eval harness, all unit-tested + gates green (pytest 521 passed/1 skipped, ruff clean, `--help` ok). **Committed `3589494`; KEPT** — first programmatic score was run 5 (2026-06-16).
 
-- `tests-2/test5-key.json` — canonical machine-readable key. **Reconciles the authoritative `test5-scoring-template.md` over 3 stale-number bugs in `test5-answer-key.md`** (the markdown's "New projects expected" cluster lists, its "Routing accuracy: 1–9, 29" set, and its "Task 29" metadata check all use wrong task numbers; correct values live in the per-task routing table + scoring template). The answer-key markdown should be corrected separately.
+- `sort-eval/harness/test5-key.json` — canonical machine-readable key. **Reconciles the authoritative `test5-scoring-template.md` over 3 stale-number bugs in `test5-answer-key.md`** (the markdown's "New projects expected" cluster lists, its "Routing accuracy: 1–9, 29" set, and its "Task 29" metadata check all use wrong task numbers; correct values live in the per-task routing table + scoring template). The answer-key markdown should be corrected separately.
 - `src/things_mcp/eval/scorer.py` — pure `score(key, states) → JSON` (decoupled from Things, unit-tested) + `collect_live_states()` live adapter + `things-mcp-score` CLI.
 - `src/things_mcp/eval/fixture_reset.py` — pure `plan_reset(...)` (diagnosis + deterministic interleaved shuffle order) + `things-mcp-fixture-reset` dry-run CLI. `--apply` is hard-guarded to refuse unless `whoami == Test`, and currently prints "execute manually per Fixture procedure" (live apply intentionally out of scope this crank).
 - `tests/test_eval_scorer.py`, `tests/test_eval_fixture_reset.py` — 20 tests on synthetic state.
@@ -91,9 +120,12 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | 1 | group_id DB-persistence + AI-heading robustness | code invariant | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
 | 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
 | 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
-| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | **READY-TO-TEST** (uncommitted; gates green) — see note below | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
-| 4 | Two-pass router→skeptic abstention | architecture | TODO | confident-wrong → 0 (demote unevidenced placements to abstain) |
-| 5 | Abstain-vs-guess instruction tuning (#5/#8/#28/#26) | prose | TODO (after baseline) | abstain-recall up without tanking routing |
+| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | **KEPT** (3589494; first programmatic score = run 5 2026-06-16) | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
+| **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | **TODO — DO THIS NEXT** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
+| **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | **TODO** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
+| **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **TODO** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
+| 4 | Two-pass router→skeptic abstention | architecture | TODO — **after #3a** (adds abstention pressure; risks worsening run-5 over-abstain) | confident-wrong → 0 (demote unevidenced placements to abstain) |
+| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
 | 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | TODO | consistency with rest of propose layer |
 
 ---
@@ -104,16 +136,20 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-15 post-run-4): NEEDS RESET.**
-Run 4 complete. Two new projects (Make Carbonara, Bake Sponge Cake) need deletion;
-tasks need returning to Inbox; abstain tags on #25/#26 need stripping; shuffle required.
+**Current state (2026-06-16 post-run-5): NEEDS RESET.**
+Run 5 complete. No new projects were created; tasks #2,4,7,9,13,14,17,20,22 are in
+existing projects (Freelance: TechCorp API, Apartment Move, Recipe App); tasks #1,6,27
+in area:Personal; task #30 in area:Home. 14 tasks remain in inbox (some with tags:
+*Duplicate?* on #11, *Unclear* on #16/#21, *Ambiguous Home* on #25/#26). Strip all
+AI tags, return all moved tasks to inbox, shuffle.
 
 **Fixture reset procedure (for future runs):**
 
 1. Call `recent_undo_log()` and identify the bulk_moves + bulk_updates from the
    completed run. Note their undo_ids.
-2. Undo each entry **newest-first** via `undo(undo_id)`. group_id is often null
-   (bypass gap — BACKLOG #1a), so `undo_group()` may not work; undo individually.
+2. Undo each entry **newest-first** via `undo(undo_id)`. If the run used
+   auto-init (post-73c26a0), `undo_group(group_id)` may work; otherwise undo
+   individually.
 3. Verify all 30 tasks are back in Inbox (`list_inbox`, cross-check against
    `test5-answer-key.md`). Re-add any that were deleted rather than moved.
 4. Strip any remaining abstain tags (*Unclear*, *Ambiguous Home*, *Duplicate?*)
@@ -126,7 +162,8 @@ tasks need returning to Inbox; abstain tags on #25/#26 need stripping; shuffle r
    Obtain UUIDs from `list_inbox`; generate a shuffled order that alternates
    across: Carbonara, Baking, Freelance, Apartment, Recipe App, and singletons/ambiguous.
 
-Reset is **not yet automated** (BACKLOG #3).
+Reset *planning* is automated (`uv run things-mcp-fixture-reset` dry-run, shipped
+in #3); live `--apply` is still manual (out of scope that crank).
 
 ---
 
@@ -136,13 +173,21 @@ Reset is **not yet automated** (BACKLOG #3).
 - Parallel-session collision risk on shared Things / state DB.
 - Run 1 / Run 2 sorting model unconfirmed (Sonnet 4.6?).
 
-## Key files
+## Key files (all under `sort-eval/`)
 
-- `test5-blind-prompt.txt` — the blind sort prompt (key-free).
+**`harness/` — persistent apparatus (reused every round):**
+- `MISSION-CONTROL.md` — this file (plan + loop + backlog + fixture + playbook).
+- `eval-ledger.md` — append-only results, one row per run.
+- `test5-answer-key.md` — human-readable scoring key (**DO NOT load in a blind run**).
+- `test5-key.json` — machine key consumed by `scorer.py` (path hard-wired there).
+- `test5-scoring-template.md` — copied per scored run.
+- `test5-blind-prompt.txt` — the one-line blind sort prompt.
 - `test5-blind-harness.md` / `test5-rerun-runbook-2026-06-14.md` — run protocol.
-- `test5-answer-key.md` — scoring key (**DO NOT load in a blind-run session**).
-- `test5-scoring-template.md` — copy per scored run.
-- `eval-ledger.md` — append-only results.
+- `TEST_5_BLIND_SORT.md` — original test-design rationale.
+
+**`runs/` — write-once records:** `test5-verification-<date>.md`, one per run.
+**`archive/` — superseded Test 4 generation.**
+See `sort-eval/README.md` for the full map.
 
 ---
 
@@ -157,22 +202,25 @@ collide on the shared DB), trigger the blind run.
 backlog status, fixture reset (as Test), code changes (via coder-sonnet).
 
 ### Session A — Blind run (MUST stay blind)
-> Run the inbox sort in `tests-2/test5-blind-prompt.txt`. Follow it exactly. Do
-> NOT read any other `tests-2/` files.
+> Run the inbox sort in `sort-eval/harness/test5-blind-prompt.txt`. Follow it
+> exactly. Do NOT read any other `sort-eval/` files.
 
 ⚠️ Never let Session A read the answer key, scoring template, this file, the
 ledger, or any verification doc — they reveal the expected answers.
 
 ### Session B — Scoring (may use the key)
-> Score the inbox sort just run. Read `MISSION-CONTROL.md` (metric defs + loop),
-> `test5-answer-key.md`, `test5-scoring-template.md`. Read live Things state via
-> things-mcp, fill `test5-verification-<today>.md` from the template, append one
-> row to `eval-ledger.md`, and set BACKLOG status in MISSION-CONTROL.
+> Score the inbox sort just run. Read `sort-eval/harness/MISSION-CONTROL.md`
+> (metric defs + loop), `sort-eval/harness/test5-answer-key.md`,
+> `sort-eval/harness/test5-scoring-template.md`. Run `uv run things-mcp-score
+> --pretty`, fill `sort-eval/runs/test5-verification-<today>.md` from the
+> template, append one row to `sort-eval/harness/eval-ledger.md`, and set BACKLOG
+> status in MISSION-CONTROL.
 
 ### Session C — Dev (one backlog item)
-> Read `MISSION-CONTROL.md` and `eval-ledger.md`. Implement the next TODO backlog
-> item. Delegate code to coder-sonnet, run the gates (`uv run pytest`, `--help`,
-> `health()`), mark it READY-TO-TEST, and tell me to commit + restart.
+> Read `sort-eval/harness/MISSION-CONTROL.md` and `sort-eval/harness/eval-ledger.md`.
+> Implement the next TODO backlog item. Delegate code to coder-sonnet, run the
+> gates (`uv run pytest`, `--help`, `health()`), mark it READY-TO-TEST, and tell
+> me to commit + restart.
 
 ### Between cycles (human)
 Commit the change → restart the MCP server → ask the agent to reset the fixture

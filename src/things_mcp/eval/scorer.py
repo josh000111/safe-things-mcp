@@ -19,8 +19,8 @@ from typing import TypedDict
 # ---------------------------------------------------------------------------
 
 def _default_key_path() -> Path:
-    """Resolve tests-2/test5-key.json relative to this file (src/things_mcp/eval/)."""
-    return Path(__file__).parent.parent.parent.parent / "tests-2" / "test5-key.json"
+    """Resolve sort-eval/harness/test5-key.json relative to this file (src/things_mcp/eval/)."""
+    return Path(__file__).parent.parent.parent.parent / "sort-eval" / "harness" / "test5-key.json"
 
 
 def load_key(path: str | Path | None = None) -> dict:
@@ -525,7 +525,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Score a live Things state against the test5 eval key."
     )
-    parser.add_argument("--key", metavar="PATH", help="Path to scorer key JSON (default: tests-2/test5-key.json)")
+    parser.add_argument("--key", metavar="PATH", help="Path to scorer key JSON (default: sort-eval/harness/test5-key.json)")
     parser.add_argument("--out", metavar="PATH", help="Write JSON output to this file (default: stdout)")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
     args = parser.parse_args(argv)
