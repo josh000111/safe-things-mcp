@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-16 (post-run-5 scoring + first-principles review; docs reorganized into `sort-eval/`)
+**Last updated:** 2026-06-16 (noise-floor baseline runs 6/7/8 complete; BACKLOG #3a DONE)
 
 ---
 
@@ -51,13 +51,12 @@ Rationale + full analysis: `sort-eval/runs/test5-verification-2026-06-14.md`.
    fill a copy of `sort-eval/harness/test5-scoring-template.md` →
    `sort-eval/runs/test5-verification-<date>.md`; append one row to
    `sort-eval/harness/eval-ledger.md`.
-6. **JUDGE vs the noise floor, NOT vs one prior run.** ⚠️ Runs 4 and 5 ran
-   *identical* sorting code yet diverged by the full size of the metrics
-   (2 clusters → 0; cw 2 → 0). A single before/after run cannot distinguish a
-   real effect from sampling noise. Set a BACKLOG item to **KEPT/REVERTED** only
-   when the change moves a metric **beyond the run-to-run spread** measured by the
-   noise-floor baseline (BACKLOG #3a). Until that baseline exists, treat single
-   runs as anecdotes.
+6. **JUDGE vs the noise floor, NOT vs one prior run.** ✅ Noise floor established
+   (BACKLOG #3a, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%],
+   coverage=[0,10,10]/10. A single before/after run cannot distinguish a real
+   effect from sampling noise. Set a BACKLOG item to **KEPT/REVERTED** only when
+   the change moves a metric **beyond the noise-floor spread**: cw sustainably=0
+   across 2+ runs, or abstain >80%, or coverage min > 0 across all runs.
 7. Next crank.
 
 **Rules:** ONE test at a time against the Test Things DB — concurrent
@@ -88,8 +87,29 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
   which never executes during a sort; the blind prompt was unchanged. So the
   2-clusters→0 / cw 2→0 swing is **run-to-run LLM variance, not a regression.**
   Consequence: the programmatic *scorer* is deterministic, but a **single run is
-  NOT a deterministic baseline** of the system. The clean baseline is still
-  **PENDING** — it requires the #3a repeat-run measurement.
+  NOT a deterministic baseline** of the system.
+- ✅ **Noise-floor baseline ESTABLISHED (2026-06-16, BACKLOG #3a DONE).**
+  Runs 6/7/8 — same SHA `773e920`, no code changes, pristine fixture reset each time.
+
+  | Metric | min | median | max |
+  |--------|-----|--------|-----|
+  | **confident_wrong** | 0 | 1 | 3 |
+  | **abstain_recall** | 3/5 (60%) | 4/5 (80%) | 4/5 (80%) |
+  | **coverage** (cooking tasks placed) | 0/10 | 10/10 | 10/10 |
+
+  **Interpretation:** Run-to-run variance is LARGE. A change must move a metric
+  *outside* this spread across multiple runs to count as a real effect:
+  - **cw**: single-run result of 0–3 is within noise; improvement requires
+    sustained cw=0 across k≥2 runs, or driving below 0 (impossible, so the
+    practical bar is: cw=0 in 2/3 runs is a candidate improvement).
+  - **abstain_recall**: single-run 60–80% is noise; >80% sustained is a true gain.
+  - **coverage**: 0–10/10 within noise; a change is real only when coverage is
+    non-zero across ALL runs (min > 0).
+  - **Systematic findings** (appeared in every run, not variance):
+    - #26 "Research eco packing materials" fails consistently — over-abstained (runs 5/6/7)
+      or wrong area (run 8). Fix target: BACKLOG #5 instruction tuning.
+    - #8 "Mix ingredients" consistently not abstained (guessed baking in runs 7 and 8).
+
 - 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
   (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
   in `scorer.py`.
@@ -121,7 +141,7 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
 | 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
 | 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | **KEPT** (3589494; first programmatic score = run 5 2026-06-16) | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
-| **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | **TODO — DO THIS NEXT** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
+| **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | **DONE (2026-06-16, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%], coverage=[0,10,10]/10** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
 | **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | **TODO** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
 | **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **TODO** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
 | 4 | Two-pass router→skeptic abstention | architecture | TODO — **after #3a** (adds abstention pressure; risks worsening run-5 over-abstain) | confident-wrong → 0 (demote unevidenced placements to abstain) |
@@ -136,12 +156,13 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-16 post-run-5): NEEDS RESET.**
-Run 5 complete. No new projects were created; tasks #2,4,7,9,13,14,17,20,22 are in
-existing projects (Freelance: TechCorp API, Apartment Move, Recipe App); tasks #1,6,27
-in area:Personal; task #30 in area:Home. 14 tasks remain in inbox (some with tags:
-*Duplicate?* on #11, *Unclear* on #16/#21, *Ambiguous Home* on #25/#26). Strip all
-AI tags, return all moved tasks to inbox, shuffle.
+**Current state (2026-06-16 post-run-8): NEEDS RESET.**
+Run 8 complete (baseline N=3). Both clusters created ("Make Carbonara" + "Bake Sponge Cake").
+Tasks #2,4,7,9,13,14,17,20,22 in existing projects; #5,10,15,19,23 in Make Carbonara;
+#3,8,12,18,24,28,29 in Bake Sponge Cake; #1,6,27 in area:Personal; #25,26 in area:Work.
+4 tasks remain in inbox: #11(*Duplicate?*), #16(*Unclear*), #21(*Unclear*), #30(*Unclear*).
+AI routing tags left on moved tasks. Strip all tags, return all moved tasks to inbox, delete
+AI projects, shuffle.
 
 **Fixture reset procedure (for future runs):**
 
@@ -202,8 +223,14 @@ collide on the shared DB), trigger the blind run.
 backlog status, fixture reset (as Test), code changes (via coder-sonnet).
 
 ### Session A — Blind run (MUST stay blind)
-> Run the inbox sort in `sort-eval/harness/test5-blind-prompt.txt`. Follow it
-> exactly. Do NOT read any other `sort-eval/` files.
+Set up per `sort-eval/harness/test5-blind-harness.md` §"Running the blind session":
+a **fresh** session whose **working directory is the testing folder
+`/Users/Test/Documents/Dev Tests/things-mcp-testing` — NOT the things-mcp repo**
+(the repo's `docs/` and `sort-eval/` answer key must be unreachable), with
+`mcp__things-mcp__*` connected and `THINGS_MCP_ALLOW_APPLESCRIPT=1` set. Paste the
+**verbatim text** of `test5-blind-prompt.txt` as the opener — do NOT give the
+agent a file path, a working-dir hint, or any reference to `sort-eval/`:
+> My Things inbox has piled up. Can you organise it into the right projects and areas?
 
 ⚠️ Never let Session A read the answer key, scoring template, this file, the
 ledger, or any verification doc — they reveal the expected answers.
