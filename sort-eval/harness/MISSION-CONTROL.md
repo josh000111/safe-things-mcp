@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-16 (noise-floor baseline runs 6/7/8 complete; BACKLOG #3a DONE; #3b+#3c+#5 READY-TO-TEST)
+**Last updated:** 2026-06-16 (BACKLOG #5 REVERTED — prose changes (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS now matches 773e920 baseline exactly; gates green. Awaiting commit + server restart before confirmation run)
 
 ---
 
@@ -110,6 +110,8 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
       or wrong area (run 8). Fix target: BACKLOG #5 instruction tuning.
     - #8 "Mix ingredients" consistently not abstained (guessed baking in runs 7 and 8).
 
+- ⚠️ **Run 9 (2026-06-16, SHA `f2c23b6`, first #5 test):** coverage=0/10 — the agent created **no new projects** (worse than run-6 which created empty projects). cw=0 ✅, abstain_recall=4/5 (80%) ✅. #5 instruction "COMMIT FULLY TO CLUSTERS YOU CREATE" did not visibly fire. Within noise-floor variance (run-6 also coverage=0), so this single run cannot confirm a regression.
+- ❌ **Run 10 (2026-06-16, SHA `f2c23b6`, second #5 test):** coverage=0/10 again — **NO projects created for the second consecutive run**. cw=0 ✅, abstain_recall=4/5 (80%) ✅. Two zeros confirm the instruction did not fire. This meets the REVERT CANDIDATE threshold (coverage min=0 across BOTH #5 runs, which is below the noise-floor bar of min>0 across all runs). Novel: #30 "Kitchen reno plan" placed in project:Apartment Move instead of staying in Inbox/*Unclear* or being routed to an area. **#5 declared REVERT CANDIDATE.**
 - 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
   (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
   in `scorer.py`.
@@ -145,7 +147,7 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | Sonnet 4.6 | **READY-TO-TEST** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
 | **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | Sonnet 4.6 | **READY-TO-TEST** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
 | 4 | Two-pass router→skeptic abstention | architecture | **Opus 4.8** | TODO — **after #3a** (adds abstention pressure; risks worsening run-5 over-abstain) | confident-wrong → 0 (demote unevidenced placements to abstain) |
-| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **READY-TO-TEST** — added "COMMIT FULLY TO A CLUSTER YOU CREATE" rule + step-8 follow-through verify to AGENT_INSTRUCTIONS (targets run-6 empty-project failure mode) | recover cluster coverage without raising confident-wrong |
+| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **REVERTED — wrong failure mode + suspected creation-hesitation; coverage 0/10 in runs 9+10 (test5-verification run9/run10). Prose (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS restored to 773e920 baseline (verified via `git diff 773e920` = empty), so NO new baseline needed. Consider escalating to BACKLOG #4 (two-pass router) as a stronger lever for cluster coverage.** | recover cluster coverage without raising confident-wrong |
 | 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | Sonnet 4.6 | TODO | consistency with rest of propose layer |
 
 ---
@@ -156,13 +158,9 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-16 post-run-8): NEEDS RESET.**
-Run 8 complete (baseline N=3). Both clusters created ("Make Carbonara" + "Bake Sponge Cake").
-Tasks #2,4,7,9,13,14,17,20,22 in existing projects; #5,10,15,19,23 in Make Carbonara;
-#3,8,12,18,24,28,29 in Bake Sponge Cake; #1,6,27 in area:Personal; #25,26 in area:Work.
-4 tasks remain in inbox: #11(*Duplicate?*), #16(*Unclear*), #21(*Unclear*), #30(*Unclear*).
-AI routing tags left on moved tasks. Strip all tags, return all moved tasks to inbox, delete
-AI projects, shuffle.
+**Current state (2026-06-16): pristine — ready for run 10.**
+All 30 tasks in Inbox, no AI-created projects, no tags, interleaved shuffle applied (no two
+same-cluster tasks adjacent). Reset completed by Session R after run 9 (BACKLOG #5 second test).
 
 **Fixture reset procedure (for future runs):**
 
