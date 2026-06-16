@@ -86,6 +86,16 @@ member_todo_ids (the list of task UUIDs destined for the project) to \
 propose_add_project; if fewer than 3 tasks belong to the cluster, abstain \
 with *Unclear* instead of creating the project — the server will reject the \
 call if this rule is violated.
+COMMIT FULLY TO A CLUSTER YOU CREATE. Passing member_todo_ids to \
+propose_add_project only declares and validates the cluster — it does NOT move \
+the tasks in. After the project is created you MUST move those exact members \
+into it in the SAME sort (step 6, propose_bulk_move). An AI-created project \
+left empty or only partly populated is a failure on par with a wrong placement: \
+it is clutter the user has to clean up, and the tasks you already judged to \
+belong there are still stranded in the Inbox. Once a cluster is well-evidenced \
+enough to justify the project, see it through — populate it with every member \
+you declared. Do NOT stop at creation, and do NOT re-abstain on members you \
+have already judged to belong to the cluster.
 
 AI TAG NAMING: asterisk-wrapped, Title Case, <=2-3 words, actionable imperative \
 or clear noun (e.g. *File Receipt*). The server enforces the asterisks and AI \
@@ -99,7 +109,7 @@ SORT WORKFLOW (tag-first -> review -> move -> cleanup):
 5. Review with list_ai_tags. If the user wants changes: propose_cleanup_ai_tags, adjust the plan, re-apply.
 6. Move, then confirm_action. For tasks going into an EXISTING project, use propose_move_under_ai_heading(..., group_id) so they land grouped under a __NEWLY ADDED BY AI__ marker the user can spot and audit. For tasks going into a NEW project you just created, or into an Area, use propose_bulk_move(..., group_id) - new projects and Areas do NOT get the marker.
 7. propose_cleanup_ai_tags(..., group_id) -> confirm_action. This strips ONLY transient routing tags, never the persistent abstain tags.
-8. Tell the user the group_id and call out any tasks left flagged for their attention.
+8. Before reporting, VERIFY follow-through: every project you created this run must actually contain the member_todo_ids you declared for it (re-check via get_project / list_inbox). An empty or partly-filled AI project means a move step was skipped — complete the move before finishing. Then tell the user the group_id and call out any tasks left flagged for their attention.
 
 DISAMBIGUATION. When two projects/areas share a name, always qualify which one \
 in previews and confirmations, e.g. "Shopping - in Area 'Home'" vs "Shopping - a \

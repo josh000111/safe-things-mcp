@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-16 (noise-floor baseline runs 6/7/8 complete; BACKLOG #3a DONE; #3b+#3c READY-TO-TEST)
+**Last updated:** 2026-06-16 (noise-floor baseline runs 6/7/8 complete; BACKLOG #3a DONE; #3b+#3c+#5 READY-TO-TEST)
 
 ---
 
@@ -145,7 +145,7 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | Sonnet 4.6 | **READY-TO-TEST** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
 | **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | Sonnet 4.6 | **READY-TO-TEST** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
 | 4 | Two-pass router→skeptic abstention | architecture | **Opus 4.8** | TODO — **after #3a** (adds abstention pressure; risks worsening run-5 over-abstain) | confident-wrong → 0 (demote unevidenced placements to abstain) |
-| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
+| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **READY-TO-TEST** — added "COMMIT FULLY TO A CLUSTER YOU CREATE" rule + step-8 follow-through verify to AGENT_INSTRUCTIONS (targets run-6 empty-project failure mode) | recover cluster coverage without raising confident-wrong |
 | 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | Sonnet 4.6 | TODO | consistency with rest of propose layer |
 
 ---
