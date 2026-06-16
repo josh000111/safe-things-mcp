@@ -67,6 +67,23 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 
 ---
 
+## BACKLOG #3 — what shipped (READY-TO-TEST, awaiting commit + restart)
+
+Programmatic eval harness, all unit-tested + gates green (pytest 521 passed/1 skipped, ruff clean, `--help` ok, live read-only scorer smoke-run works). **Uncommitted** — joshsmith must commit, then restart MCP server.
+
+- `tests-2/test5-key.json` — canonical machine-readable key. **Reconciles the authoritative `test5-scoring-template.md` over 3 stale-number bugs in `test5-answer-key.md`** (the markdown's "New projects expected" cluster lists, its "Routing accuracy: 1–9, 29" set, and its "Task 29" metadata check all use wrong task numbers; correct values live in the per-task routing table + scoring template). The answer-key markdown should be corrected separately.
+- `src/things_mcp/eval/scorer.py` — pure `score(key, states) → JSON` (decoupled from Things, unit-tested) + `collect_live_states()` live adapter + `things-mcp-score` CLI.
+- `src/things_mcp/eval/fixture_reset.py` — pure `plan_reset(...)` (diagnosis + deterministic interleaved shuffle order) + `things-mcp-fixture-reset` dry-run CLI. `--apply` is hard-guarded to refuse unless `whoami == Test`, and currently prints "execute manually per Fixture procedure" (live apply intentionally out of scope this crank).
+- `tests/test_eval_scorer.py`, `tests/test_eval_fixture_reset.py` — 20 tests on synthetic state.
+- `pyproject.toml` — 2 new console scripts.
+
+**Scoring-policy decisions baked in (review when scoring next run):**
+- `confident-wrong` (the drive-to-0 metric) = any task placed in a project/area when the key expects a different project, the wrong cluster, or an abstain. Inbox under-commit is NOT confident-wrong.
+- `abstain-recall` denominator = the 5 strict-abstain tasks only {#8, #11, #16, #21, #25}. The "abstain-or-area" tasks (#1,6,27,30) are scored on a separate axis (inbox OR confident existing Area = pass) and `route_or_abstain` (#5,#28) on the cluster axis — neither counts toward abstain-recall. This makes the denominator stable (prior manual runs drifted: "low"/"1/3"/"1/2").
+- Cluster name specificity judged by a generic-name denylist + cohesion + not-merged, since new-project names are non-deterministic.
+
+Smoke-run against the current (un-reset run-4) live state gave routing 9/10, confident_wrong 1, abstain_recall 3/5 — differs from the manual run-4 score (cw 2, abstain 1/2), which is the scorer drift this item removes.
+
 ## Backlog (ordered)
 
 | # | Change | Type | Status | Hypothesis (metric it should move) |
@@ -74,7 +91,7 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 | 1 | group_id DB-persistence + AI-heading robustness | code invariant | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
 | 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
 | 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
-| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | TODO | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
+| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | **READY-TO-TEST** (uncommitted; gates green) — see note below | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
 | 4 | Two-pass router→skeptic abstention | architecture | TODO | confident-wrong → 0 (demote unevidenced placements to abstain) |
 | 5 | Abstain-vs-guess instruction tuning (#5/#8/#28/#26) | prose | TODO (after baseline) | abstain-recall up without tanking routing |
 | 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | TODO | consistency with rest of propose layer |
