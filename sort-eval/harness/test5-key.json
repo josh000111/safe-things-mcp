@@ -10,6 +10,7 @@
   },
   "routing_existing_set": [2, 4, 7, 9, 13, 14, 17, 20, 22, 26],
   "abstain_recall_set": [8, 11, 16, 21, 25],
+  "coverage_set": [3, 5, 10, 12, 15, 18, 19, 23, 24, 29],
   "tasks": [
     {"n": 1, "title": "Collect dry cleaning", "policy": "abstain_or_area", "abstain_tag": "*Unclear*"},
     {"n": 2, "title": "Add endpoint rate-limit headers", "policy": "route_existing", "project": "Freelance: TechCorp API"},

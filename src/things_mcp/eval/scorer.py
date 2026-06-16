@@ -271,6 +271,9 @@ def score(key: dict, states: dict[str, TaskState]) -> dict:
 
     routing_existing_set = set(key.get("routing_existing_set", []))
     abstain_recall_set = set(key.get("abstain_recall_set", []))
+    coverage_set = set(key.get("coverage_set", []))
+    coverage_placed = 0
+    coverage_total = len(coverage_set)
 
     for task in key["tasks"]:
         n = task["n"]
@@ -323,6 +326,9 @@ def score(key: dict, states: dict[str, TaskState]) -> dict:
 
         if confident_wrong:
             confident_wrong_count += 1
+
+        if n in coverage_set and state.get("container_kind") == "project":
+            coverage_placed += 1
 
         # Build expected description for the output.
         expected = _build_expected_desc(task, cluster_info)
@@ -398,6 +404,11 @@ def score(key: dict, states: dict[str, TaskState]) -> dict:
             "cluster_names": cluster_names,
             "generic_name_warning": generic_name_warning,
             "metadata_preserved_26": meta26,
+            "coverage": {
+                "placed": coverage_placed,
+                "total": coverage_total,
+                "pct": round(coverage_placed / coverage_total if coverage_total else 0.0, 4),
+            },
         },
         "warnings": warnings,
     }

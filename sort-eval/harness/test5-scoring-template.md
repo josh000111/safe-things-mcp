@@ -61,6 +61,7 @@ candidate project. Mark each row ✅ / ❌ / ⚠️ and add a note.
 | Carbonara cluster | all of #5,10,15,19,23 in ONE dish-specific project | |
 | Baking cluster | all of #3,12,18,24,29 in ONE cake-specific project | |
 | Clusters NOT merged | two distinct projects, not one "Cooking" | |
+| Coverage / yield | cooking tasks #3,5,10,12,15,18,19,23,24,29 placed in a project (target: all 10) | |
 | Cross-cluster abstain | #8 in Inbox *Ambiguous Home* (coin-flip). #28 → Bake a Cake or abstain. #5 → Carbonara or abstain | |
 | #25 abstain | Inbox *Ambiguous Home* | |
 | Orphan abstains | #1,6,16,21,27,30 *Unclear* or confident Area | |

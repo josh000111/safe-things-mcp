@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS sort_session_project (
 
 CREATE INDEX IF NOT EXISTS idx_sort_session_project_group
     ON sort_session_project(group_id);
+
+CREATE TABLE IF NOT EXISTS sort_guard_rejected (
+    id           TEXT PRIMARY KEY,
+    group_id     TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    member_count INTEGER NOT NULL,
+    rejected_at  TEXT NOT NULL
+);
 """
 
 

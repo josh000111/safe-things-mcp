@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-16 (noise-floor baseline runs 6/7/8 complete; BACKLOG #3a DONE)
+**Last updated:** 2026-06-16 (noise-floor baseline runs 6/7/8 complete; BACKLOG #3a DONE; #3b+#3c READY-TO-TEST)
 
 ---
 
@@ -135,18 +135,18 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 
 ## Backlog (ordered)
 
-| # | Change | Type | Status | Hypothesis (metric it should move) |
-|---|--------|------|--------|-----------------------------------|
-| 1 | group_id DB-persistence + AI-heading robustness | code invariant | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
-| 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
-| 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
-| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | **KEPT** (3589494; first programmatic score = run 5 2026-06-16) | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
-| **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | **DONE (2026-06-16, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%], coverage=[0,10,10]/10** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
-| **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | **TODO** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
-| **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **TODO** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
-| 4 | Two-pass router→skeptic abstention | architecture | TODO — **after #3a** (adds abstention pressure; risks worsening run-5 over-abstain) | confident-wrong → 0 (demote unevidenced placements to abstain) |
-| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
-| 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | TODO | consistency with rest of propose layer |
+| # | Change | Type | Dev model | Status | Hypothesis (metric it should move) |
+|---|--------|------|-----------|--------|-----------------------------------|
+| 1 | group_id DB-persistence + AI-heading robustness | code invariant | — | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
+| 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | — | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
+| 2 | <3-task project guard | code invariant | — | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
+| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | — | **KEPT** (3589494; first programmatic score = run 5 2026-06-16) | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
+| **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | — | **DONE (2026-06-16, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%], coverage=[0,10,10]/10** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
+| **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | Sonnet 4.6 | **READY-TO-TEST** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
+| **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | Sonnet 4.6 | **READY-TO-TEST** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
+| 4 | Two-pass router→skeptic abstention | architecture | **Opus 4.8** | TODO — **after #3a** (adds abstention pressure; risks worsening run-5 over-abstain) | confident-wrong → 0 (demote unevidenced placements to abstain) |
+| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
+| 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | Sonnet 4.6 | TODO | consistency with rest of propose layer |
 
 ---
 
@@ -212,6 +212,29 @@ See `sort-eval/README.md` for the full map.
 
 ---
 
+## Model guide
+
+Different session types need different amounts of reasoning. Use the right model
+to avoid wasting Opus tokens on mechanical work and Sonnet tokens on hard problems.
+
+| Session | Model | Why |
+|---------|-------|-----|
+| **R — Fixture reset** | **Sonnet 4.6** | Mechanical undo + shuffle; no judgment needed |
+| **A — Blind sort** | **Sonnet 4.6** | Must match the noise-floor model — changing it requires a new baseline |
+| **B — Scoring** | **Sonnet 4.6** | Runs CLI, fills template; mechanical |
+| **C — Dev, code to clear spec** (#3b/#3c/#6-style) | **Sonnet 4.6** | Delegates to coder-sonnet anyway |
+| **C — Dev, architecture** (#4 two-pass router) | **Opus 4.8** | Requires reasoning about multi-pass prompt design and tradeoff analysis |
+| **C — Dev, instruction/prose tuning** (#5) | **Opus 4.8** | Requires reasoning about LLM behavior and crafting effective instructions |
+
+Per-item model assignments are also noted in the backlog table below (Model column).
+
+⚠️ **Changing the Session A model is a controlled experiment, not a free upgrade.**
+If you swap Sonnet→Opus for sorting, the noise-floor spread no longer applies and
+you must run k≥3 runs at the new model before interpreting results. Keep the sort
+model pinned at Sonnet 4.6 until a model-swap experiment is deliberately planned.
+
+---
+
 ## Session playbook (one fresh session per phase — copy-paste the opener)
 
 **Manual steps only the human can do:** commit (`.git` is owned by joshsmith —
@@ -222,7 +245,13 @@ collide on the shared DB), trigger the blind run.
 **Agent-handled once pointed at the docs:** scoring vs. key, ledger append,
 backlog status, fixture reset (as Test), code changes (via coder-sonnet).
 
-### Session A — Blind run (MUST stay blind)
+### Session R — Fixture reset [Sonnet 4.6]
+> Reset the Things test fixture to pristine state. Read
+> `sort-eval/harness/MISSION-CONTROL.md` (Fixture section) for the current state
+> and reset procedure. Working directory: `/Users/Shared/things-mcp`. Use the
+> things-mcp MCP tools. Do not touch the answer key or ledger.
+
+### Session A — Blind run (MUST stay blind) [Sonnet 4.6]
 Set up per `sort-eval/harness/test5-blind-harness.md` §"Running the blind session":
 a **fresh** session whose **working directory is the testing folder
 `/Users/Test/Documents/Dev Tests/things-mcp-testing` — NOT the things-mcp repo**
@@ -235,7 +264,7 @@ agent a file path, a working-dir hint, or any reference to `sort-eval/`:
 ⚠️ Never let Session A read the answer key, scoring template, this file, the
 ledger, or any verification doc — they reveal the expected answers.
 
-### Session B — Scoring (may use the key)
+### Session B — Scoring (may use the key) [Sonnet 4.6]
 > Score the inbox sort just run. Read `sort-eval/harness/MISSION-CONTROL.md`
 > (metric defs + loop), `sort-eval/harness/test5-answer-key.md`,
 > `sort-eval/harness/test5-scoring-template.md`. Run `uv run things-mcp-score
@@ -243,7 +272,7 @@ ledger, or any verification doc — they reveal the expected answers.
 > template, append one row to `sort-eval/harness/eval-ledger.md`, and set BACKLOG
 > status in MISSION-CONTROL.
 
-### Session C — Dev (one backlog item)
+### Session C — Dev (one backlog item) [see Model guide above]
 > Read `sort-eval/harness/MISSION-CONTROL.md` and `sort-eval/harness/eval-ledger.md`.
 > Implement the next TODO backlog item. Delegate code to coder-sonnet, run the
 > gates (`uv run pytest`, `--help`, `health()`), mark it READY-TO-TEST, and tell
@@ -251,4 +280,4 @@ ledger, or any verification doc — they reveal the expected answers.
 
 ### Between cycles (human)
 Commit the change → restart the MCP server → ask the agent to reset the fixture
-(Fixture section) → start Session A again.
+(Session R) → start Session A again.

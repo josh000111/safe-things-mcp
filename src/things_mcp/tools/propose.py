@@ -226,6 +226,7 @@ async def propose_add_project(
     if sort_session.active() is not None:
         count = len(member_todo_ids) if member_todo_ids else 0
         if count < 3:
+            sort_session.record_rejected_project(title, count)
             return {
                 "validation_error": True,
                 "message": (
