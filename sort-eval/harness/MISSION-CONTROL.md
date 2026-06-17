@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-17 (BACKLOG #6 READY-TO-TEST — three-part instruction patch: notes-first rule, mandatory coin-flip abstain, cluster plan + empty-project guard)
+**Last updated:** 2026-06-17 (BACKLOG #6 REVERTED — run 14 cw=12, 4× above noise-floor ceiling; novel failure: all cluster tasks → area:Personal)
 
 ---
 
@@ -106,9 +106,16 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
   - **coverage**: 0–10/10 within noise; a change is real only when coverage is
     non-zero across ALL runs (min > 0).
   - **Systematic findings** (appeared in every run, not variance):
-    - #26 "Research eco packing materials" fails consistently — over-abstained (runs 5/6/7)
-      or wrong area (run 8). Fix target: BACKLOG #5 instruction tuning.
-    - #8 "Mix ingredients" consistently not abstained (guessed baking in runs 7 and 8).
+    - #26 "Research eco packing materials" fails consistently — over-abstained (runs 5/6/7/9/10/11/12/13/14)
+      or wrong area (run 8). 10+ consecutive misses.
+    - #8 "Mix ingredients" consistently not abstained — guessed baking (runs 7/8/12), moved to Personal (run 14).
+- ❌ **BACKLOG #6 REVERTED (2026-06-17, run 14, SHA 83eabe5).** cw=12, worst since run 3
+  (cw=13). The three-part instruction patch caused the agent to dump ALL 10 cluster tasks
+  into area:Personal instead of creating new projects. Novel failure: agent treated
+  area:Personal as a generic personal catch-all, bypassing cluster-project creation entirely.
+  Abstain-recall (4/5) and routing-acc (9/10) unaffected. Single run was sufficient to
+  revert given cw=12 is 4× above noise-floor ceiling of 3. See
+  test5-verification-2026-06-17-run14.md.
 
 - 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
   (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
@@ -146,7 +153,7 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **TODO** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
 | 4 | Two-pass router→skeptic abstention | architecture | **REVERTED — bimodal oscillation (cw=[3,0], coverage=[10,0]/10 across runs 12/13); no metric moved outside noise floor; skeptic had no per-task veto, caused all-or-nothing behaviour. SHA 2bd582c reverted.** | confident-wrong → 0 (demote unevidenced placements to abstain) |
 | 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
-| **6** | **Three-part instruction patch** (notes-first rule; mandatory coin-flip abstain; cluster-plan + empty-project guard in workflow) | **prose** | **READY-TO-TEST** (commit TBD) | #26 fix: notes resolve title ambiguity; #8 fix: BOTH-clusters → mandatory *Ambiguous Home*; coverage fix: cluster plan forces commit-or-tag, step-6 guard prevents empty projects |
+| **6** | **Three-part instruction patch** (notes-first rule; mandatory coin-flip abstain; cluster-plan + empty-project guard in workflow) | **prose** | **REVERTED — cw=12 (run 14, 83eabe5), 4× above noise-floor ceiling of 3. Novel failure: agent used area:Personal as catch-all for all 10 cluster tasks instead of creating projects. Zero projects created. Abstain-recall + routing unaffected. Single run sufficient to revert given magnitude.** | #26 fix: notes resolve title ambiguity; #8 fix: BOTH-clusters → mandatory *Ambiguous Home*; coverage fix: cluster plan forces commit-or-tag, step-6 guard prevents empty projects |
 | 7 | Standardize `validation_error` shape (raise vs dict) | cleanup | TODO | consistency with rest of propose layer |
 
 ---
@@ -157,12 +164,10 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-17 post-reset, ready for run 14): PRISTINE.**
-All 30 tasks in Inbox, no abstain tags, no AI-created projects.
-Inbox interleaved (S,C,B,F,A,R,S,C,B,F,A,R,S,C,B,F,A,R,S,C,B,F,A,S,C,S,B,S,S,S).
-Reset from post-run-13 state: undo_group("sort-inbox-20260617") reversed 13 moved tasks;
-two AI projects (Bake Sponge Cake, Cook Carbonara) soft-undone via undo(add_project);
-3 stray 5A-HARDDELETE-* tasks deleted; no abstain tags were present post-undo.
+**Current state (2026-06-17 post-run-14): DIRTY — needs reset before run 15.**
+Run 14 (BACKLOG #6) moved 12 tasks to area:Personal; tagged #11 *Duplicate?*, #16/*21
+*Unclear*, #25 *Ambiguous Home*, #26 *Ambiguous Home*. No new AI projects created.
+Must undo run-14 moves and strip remaining abstain tags before next run.
 
 **Fixture reset procedure (for future runs):**
 
@@ -230,7 +235,7 @@ a **fresh** session whose **working directory is the testing folder
 `mcp__things-mcp__*` connected and `THINGS_MCP_ALLOW_APPLESCRIPT=1` set. Paste the
 **verbatim text** of `test5-blind-prompt.txt` as the opener — do NOT give the
 agent a file path, a working-dir hint, or any reference to `sort-eval/`:
-> My Things inbox has piled up. Can you organise it into the right projects and areas?
+> Use things-mcp. Organise my Inbox into the correct projects and areas.
 
 ⚠️ Never let Session A read the answer key, scoring template, this file, the
 ledger, or any verification doc — they reveal the expected answers.
