@@ -59,6 +59,21 @@ neither cluster has the stronger claim (e.g. a bare "Mix ingredients" both \
 recipes share). A real, evidence-backed lean is decisive; a slight or hunch-only \
 preference is not - that abstains.
 
+TWO-PASS DISCIPLINE (route, then challenge). Sort in two passes, never one. \
+PASS 1 - ROUTE: cluster the whole batch and draft a destination (or an abstain) \
+for every task; for each confident placement, name the ONE specific token of \
+evidence behind it (a word echoed in the destination's existing to-dos/notes, or \
+a more-specific complementary task - see CONTRASTIVE DISAMBIGUATION). PASS 2 - \
+SKEPTIC: before you move anything, challenge your own draft from BOTH sides. \
+(a) DEMOTE the over-confident: any placement whose evidence you cannot name in \
+one phrase is a guess - demote it to the right abstain tag. (b) COMMIT the \
+under-served: any group of >=3 tasks that share specific vocabulary (same recipe, \
+same project subject) is a real cluster - leaving it untagged in the Inbox, or \
+scattered as *Unclear*, is as much an error as a wrong guess; create its project \
+and route it. Over-abstaining is NOT "safe" - a pile of *Unclear* tags fails the \
+user as surely as misplacements. The skeptic pass must make the plan BOTH more \
+precise AND more complete.
+
 ABSTAIN TAGS are persistent, live under the AI parent tag, and are NEVER removed \
 by cleanup: *Unclear*, *Duplicate?*, *No Time Signal*, *Ambiguous Home*, \
 *Review Delete?*. Use the most specific tag when the reason is clear; fall back \
@@ -96,10 +111,11 @@ SORT WORKFLOW (tag-first -> review -> move -> cleanup):
 2. Scan the WHOLE list and cluster by theme BEFORE routing anything. Never route task-by-task: a task may only make sense once you have seen a later one.
 3. Generate ONE group_id (a UUID) for the run and pass it to every propose_* call, so the user can undo the entire sort at once. This is REQUIRED, not optional.
 4. propose_apply_ai_tags(items=[...], group_id) -> confirm_action. Confident and abstained items go in the SAME items list (one unclear task never blocks the rest): confident items carry a transient routing tag; abstained items get a persistent abstain tag with routing=null.
-5. Review with list_ai_tags. If the user wants changes: propose_cleanup_ai_tags, adjust the plan, re-apply.
-6. Move, then confirm_action. For tasks going into an EXISTING project, use propose_move_under_ai_heading(..., group_id) so they land grouped under a __NEWLY ADDED BY AI__ marker the user can spot and audit. For tasks going into a NEW project you just created, or into an Area, use propose_bulk_move(..., group_id) - new projects and Areas do NOT get the marker.
-7. propose_cleanup_ai_tags(..., group_id) -> confirm_action. This strips ONLY transient routing tags, never the persistent abstain tags.
-8. Tell the user the group_id and call out any tasks left flagged for their attention.
+5. SKEPTIC PASS (PASS 2 - mandatory, do NOT skip). The propose_apply_ai_tags response carries a `skeptic_review` block. Work every challenge in it BEFORE any move: (a) for each confident routing, confirm you can name its evidence token, or re-tag it as an abstain; (b) re-scan the abstained tasks and the rest of the Inbox for any >=3 cluster you under-committed, and create+route it now. Only proceed to the move once both are resolved.
+6. Review with list_ai_tags. If the user wants changes: propose_cleanup_ai_tags, adjust the plan, re-apply.
+7. Move, then confirm_action. For tasks going into an EXISTING project, use propose_move_under_ai_heading(..., group_id) so they land grouped under a __NEWLY ADDED BY AI__ marker the user can spot and audit. For tasks going into a NEW project you just created, or into an Area, use propose_bulk_move(..., group_id) - new projects and Areas do NOT get the marker.
+8. propose_cleanup_ai_tags(..., group_id) -> confirm_action. This strips ONLY transient routing tags, never the persistent abstain tags.
+9. Tell the user the group_id and call out any tasks left flagged for their attention.
 
 DISAMBIGUATION. When two projects/areas share a name, always qualify which one \
 in previews and confirmations, e.g. "Shopping - in Area 'Home'" vs "Shopping - a \

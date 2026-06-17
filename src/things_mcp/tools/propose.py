@@ -48,6 +48,7 @@ from ..models import (
     ProposeUpdateTodoInput,
 )
 from ..services import handlers, things_repo, url_scheme
+from ..sort_skeptic import build_skeptic_review
 from ..state import pending, sort_session
 
 # Move targets that are NOT a project/area UUID (keywords + computed views).
@@ -839,9 +840,11 @@ async def propose_apply_ai_tags(
     payload_model = ProposeApplyAiTagsInput(items=items, group_id=group_id)
     payload = payload_model.model_dump()
     preview = handlers.apply_ai_tags.make_preview(payload)
-    return await _enqueue_and_maybe_auto_confirm(
+    result = await _enqueue_and_maybe_auto_confirm(
         kind=handlers.apply_ai_tags.KIND, payload=payload, preview=preview
     )
+    result["skeptic_review"] = build_skeptic_review(items)
+    return result
 
 
 async def propose_cleanup_ai_tags(

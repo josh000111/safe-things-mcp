@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-16 (BACKLOG #5 REVERTED — prose changes (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS now matches 773e920 baseline exactly; gates green. Awaiting commit + server restart before confirmation run)
+**Last updated:** 2026-06-17 (BACKLOG #4 two-pass router→skeptic implemented & gates green — Session C; READY-TO-TEST, uncommitted. See "BACKLOG #4" detail block below. Prior entry: Run 11 scored — Session B. OFF-PROMPT run on post-#5-revert baseline (SHA 6fc83f2 = 773e920 AGENT_INSTRUCTIONS). coverage=0/10 (within noise floor), cw=1, abstain_recall=2/5 (40%, below noise-floor min). Not pooled with noise floor. Verbatim-prompt run 12 still owed to confirm revert. See test5-verification-2026-06-17-run11.md.)
 
 ---
 
@@ -112,9 +112,53 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 
 - ⚠️ **Run 9 (2026-06-16, SHA `f2c23b6`, first #5 test):** coverage=0/10 — the agent created **no new projects** (worse than run-6 which created empty projects). cw=0 ✅, abstain_recall=4/5 (80%) ✅. #5 instruction "COMMIT FULLY TO CLUSTERS YOU CREATE" did not visibly fire. Within noise-floor variance (run-6 also coverage=0), so this single run cannot confirm a regression.
 - ❌ **Run 10 (2026-06-16, SHA `f2c23b6`, second #5 test):** coverage=0/10 again — **NO projects created for the second consecutive run**. cw=0 ✅, abstain_recall=4/5 (80%) ✅. Two zeros confirm the instruction did not fire. This meets the REVERT CANDIDATE threshold (coverage min=0 across BOTH #5 runs, which is below the noise-floor bar of min>0 across all runs). Novel: #30 "Kitchen reno plan" placed in project:Apartment Move instead of staying in Inbox/*Unclear* or being routed to an area. **#5 declared REVERT CANDIDATE.**
+- ⚠️ **Run 11 (2026-06-17, SHA `6fc83f2`, post-#5-revert): OFF-PROMPT** (used "right projects and areas" vs canonical "correct"). coverage=0/10 — no cluster projects created, within noise floor but no recovery signal. cw=1 (#16 🛒→Shopping). abstain_recall=2/5 (40%) — new low, below noise-floor minimum of 60%; likely a prompt-wording artifact but cannot rule out a true regression. #26 over-abstained (7+ consecutive runs). #30→Apartment Move (borderline, same as run-10). **Verbatim-prompt run 12 still required before BACKLOG #5 can close.**
 - 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
   (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
   in `scorer.py`.
+
+---
+
+## BACKLOG #4 — two-pass router→skeptic (READY-TO-TEST, uncommitted 2026-06-17)
+
+**Status:** code complete on disk, NOT yet committed, NOT yet live (server still runs
+old code). Gates green: `uv run pytest` 532 passed / 1 skipped, `--help` exit 0,
+`health()` returns all required fields.
+
+**Design rationale (why this is "architecture", not a repeat of #5):** the MCP server
+cannot spawn a second LLM, so the skeptic is a *self-administered* second pass by the
+same blind Sonnet agent. The only two channels are (1) `AGENT_INSTRUCTIONS` (read once
+at session start — attention decays, which is why #5's front-loaded exhortation didn't
+fire) and (2) **tool-response text** (high-salience, injected mid-workflow). #4 uses
+BOTH: prose defines the two-pass discipline, and a structured `skeptic_review` block is
+attached to the `propose_apply_ai_tags` RESPONSE so the discipline is re-surfaced right
+before the irreversible move.
+
+**The skeptic has TWO symmetric duties** (this is what guards coverage):
+- **DEMOTE** (precision → cw to 0): any confident placement whose evidence can't be
+  named in one phrase → demote to an abstain tag.
+- **COMMIT** (coverage → prevents the run-6/9/10 collapse): any ≥3-task cluster sharing
+  specific vocabulary left untagged / scattered as *Unclear* is *under*-commitment —
+  create the project and route it. Over-abstaining is explicitly framed as a failure.
+
+**Files changed (uncommitted):**
+- `src/things_mcp/server.py` — AGENT_INSTRUCTIONS: new TWO-PASS DISCIPLINE paragraph +
+  new mandatory SKEPTIC step in SORT WORKFLOW (steps renumbered 1..9).
+- `src/things_mcp/sort_skeptic.py` (new) — pure `build_skeptic_review(items) -> dict`,
+  no I/O, fully unit-tested.
+- `src/things_mcp/tools/propose.py` — `propose_apply_ai_tags` attaches `skeptic_review`
+  to its return dict. Purely additive: no mutation behaviour changes, no write-path
+  touch, no new V2 gate (logs/mutates nothing).
+- `tests/test_sort_skeptic.py` (new) — 7 pure tests.
+
+**Scope note:** the skeptic block is injected at the `propose_apply_ai_tags` checkpoint
+ONLY (the natural point after a draft plan but before the move). Reinforcing it on
+`propose_bulk_move` too is a possible follow-up if coverage still collapses, deliberately
+left out to keep a clean signal vs. the noise floor.
+
+**NEXT (human):** commit (joshsmith — `.git` not writable by Test) → restart the MCP
+server (Claude Desktop) → confirm new code live (process start time) → Session R fixture
+reset → Session A blind run. Judge against the noise floor (runs 6/7/8), not one prior run.
 
 ---
 
@@ -146,8 +190,8 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | — | **DONE (2026-06-16, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%], coverage=[0,10,10]/10** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
 | **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | Sonnet 4.6 | **READY-TO-TEST** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
 | **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | Sonnet 4.6 | **READY-TO-TEST** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
-| 4 | Two-pass router→skeptic abstention | architecture | **Opus 4.8** | TODO — **after #3a** (adds abstention pressure; risks worsening run-5 over-abstain) | confident-wrong → 0 (demote unevidenced placements to abstain) |
-| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **REVERTED — wrong failure mode + suspected creation-hesitation; coverage 0/10 in runs 9+10 (test5-verification run9/run10). Prose (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS restored to 773e920 baseline (verified via `git diff 773e920` = empty), so NO new baseline needed. Consider escalating to BACKLOG #4 (two-pass router) as a stronger lever for cluster coverage.** | recover cluster coverage without raising confident-wrong |
+| 4 | Two-pass router→skeptic abstention | architecture | **Opus 4.8** | **READY-TO-TEST** (Session C 2026-06-17, uncommitted) — see #4 detail below | confident-wrong → 0 **without** coverage collapse (skeptic DEMOTEs weak placements *and* COMMITs under-served ≥3 clusters) |
+| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **REVERTED — wrong failure mode + suspected creation-hesitation; coverage 0/10 in runs 9+10. Prose (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS restored to 773e920 baseline. Run 11 (2026-06-17, SHA 6fc83f2): OFF-PROMPT confound — coverage=0/10 (within noise floor but no recovery signal), cw=1, abstain_recall=40% (below floor, may be prompt artifact). Cannot confirm revert effectiveness from run 11 alone. RECOMMENDATION: run verbatim-prompt run 12 before declaring KEPT-as-baseline or escalating to #4. If run 12 shows coverage∈[0,10] and abstain_recall≥60% → KEPT-as-baseline (revert worked, #5 closed). If coverage=0 again across both canonical runs → escalate to BACKLOG #4 (two-pass router).** | recover cluster coverage without raising confident-wrong |
 | 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | Sonnet 4.6 | TODO | consistency with rest of propose layer |
 
 ---
@@ -158,9 +202,10 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-16): pristine — ready for run 10.**
+**Current state (2026-06-17): pristine — ready for run 11.**
 All 30 tasks in Inbox, no AI-created projects, no tags, interleaved shuffle applied (no two
-same-cluster tasks adjacent). Reset completed by Session R after run 9 (BACKLOG #5 second test).
+same-cluster tasks adjacent). Reset completed by Session R after run 10 (BACKLOG #5 reverted;
+AGENT_INSTRUCTIONS restored to 773e920 baseline). Sentinel "5A-HARDDELETE-1781649852" removed.
 
 **Fixture reset procedure (for future runs):**
 
@@ -257,7 +302,7 @@ a **fresh** session whose **working directory is the testing folder
 `mcp__things-mcp__*` connected and `THINGS_MCP_ALLOW_APPLESCRIPT=1` set. Paste the
 **verbatim text** of `test5-blind-prompt.txt` as the opener — do NOT give the
 agent a file path, a working-dir hint, or any reference to `sort-eval/`:
-> My Things inbox has piled up. Can you organise it into the right projects and areas?
+> Use things-mcp. Organise my Inbox into the correct projects and areas.
 
 ⚠️ Never let Session A read the answer key, scoring template, this file, the
 ledger, or any verification doc — they reveal the expected answers.

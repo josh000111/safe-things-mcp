@@ -71,8 +71,8 @@ Follow `test5-blind-harness.md` §"Running the blind session". Essentials:
 2. Working directory **`/Users/Test/Documents/Dev Tests/things-mcp-testing`**
    (NOT the repo — keeps the agent away from docs and the answer key).
 3. `THINGS_MCP_ALLOW_APPLESCRIPT=1` set; `mcp__things-mcp__*` tools connected.
-4. Paste `test5-blind-prompt.txt` verbatim ("My Things inbox has piled up. Can
-   you organise it into the right projects and areas?").
+4. Paste `test5-blind-prompt.txt` verbatim ("Use things-mcp. Organise my Inbox
+   into the correct projects and areas.").
 5. Do not coach. Approve the new-project list when asked; do not steer naming or
    routing.
 6. `whoami` must be `Test` (never `joshsmith`).

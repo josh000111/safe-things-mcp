@@ -1,1 +1,1 @@
-Use the things-mcp to organise my Things Inbox into the correct projects and areas.
+Use things-mcp. Organise my Inbox into the correct projects and areas.
