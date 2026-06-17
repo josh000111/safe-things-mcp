@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-17 (BACKLOG #4 REVERTED — bimodal oscillation, no metric moved outside noise floor)
+**Last updated:** 2026-06-17 (BACKLOG #6 READY-TO-TEST — three-part instruction patch: notes-first rule, mandatory coin-flip abstain, cluster plan + empty-project guard)
 
 ---
 
@@ -146,7 +146,8 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **TODO** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
 | 4 | Two-pass router→skeptic abstention | architecture | **REVERTED — bimodal oscillation (cw=[3,0], coverage=[10,0]/10 across runs 12/13); no metric moved outside noise floor; skeptic had no per-task veto, caused all-or-nothing behaviour. SHA 2bd582c reverted.** | confident-wrong → 0 (demote unevidenced placements to abstain) |
 | 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
-| 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | TODO | consistency with rest of propose layer |
+| **6** | **Three-part instruction patch** (notes-first rule; mandatory coin-flip abstain; cluster-plan + empty-project guard in workflow) | **prose** | **READY-TO-TEST** (commit TBD) | #26 fix: notes resolve title ambiguity; #8 fix: BOTH-clusters → mandatory *Ambiguous Home*; coverage fix: cluster plan forces commit-or-tag, step-6 guard prevents empty projects |
+| 7 | Standardize `validation_error` shape (raise vs dict) | cleanup | TODO | consistency with rest of propose layer |
 
 ---
 
@@ -156,11 +157,12 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-17 post-run-13): NEEDS RESET.**
-Run 13 complete (BACKLOG #4, N=2). No AI projects created (skeptic blocked all cluster creation).
-Tasks #2,4,7,9,13,14,17,20,22 in existing projects; #1,6,27 in area:Personal; #30 in area:Home.
-Inbox contains: #3,5,8,10,11(*Duplicate?*),12,15,16(*Unclear*),18,19,21(*Unclear*),23,24,25(*Ambiguous Home*),26(*Ambiguous Home*),28,29.
-No AI projects to delete. Strip *Duplicate?*/*Unclear*/*Ambiguous Home* tags, return moved tasks to inbox, shuffle.
+**Current state (2026-06-17 post-reset, ready for run 14): PRISTINE.**
+All 30 tasks in Inbox, no abstain tags, no AI-created projects.
+Inbox interleaved (S,C,B,F,A,R,S,C,B,F,A,R,S,C,B,F,A,R,S,C,B,F,A,S,C,S,B,S,S,S).
+Reset from post-run-13 state: undo_group("sort-inbox-20260617") reversed 13 moved tasks;
+two AI projects (Bake Sponge Cake, Cook Carbonara) soft-undone via undo(add_project);
+3 stray 5A-HARDDELETE-* tasks deleted; no abstain tags were present post-undo.
 
 **Fixture reset procedure (for future runs):**
 
