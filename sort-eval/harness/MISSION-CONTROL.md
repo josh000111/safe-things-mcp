@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-17 (Run 12 scored — Session B. FIRST run on BACKLOG #4 build (SHA 2bd582c). coverage=10/10 ✅ (skeptic COMMIT duty fired), cw=3 (at noise-floor ceiling; DEMOTE duty not evident), abstain_recall=3/5 (60%, at noise-floor min). Single run — #4 cannot be judged yet; 2–3 more runs needed. #5 functionally closed (no creation-hesitation). See test5-verification-2026-06-17-run12.md. Prior: BACKLOG #4 two-pass router→skeptic implemented & gates green — Session C.)
+**Last updated:** 2026-06-17 (BACKLOG #4 REVERTED — bimodal oscillation, no metric moved outside noise floor)
 
 ---
 
@@ -110,54 +110,9 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
       or wrong area (run 8). Fix target: BACKLOG #5 instruction tuning.
     - #8 "Mix ingredients" consistently not abstained (guessed baking in runs 7 and 8).
 
-- ⚠️ **Run 9 (2026-06-16, SHA `f2c23b6`, first #5 test):** coverage=0/10 — the agent created **no new projects** (worse than run-6 which created empty projects). cw=0 ✅, abstain_recall=4/5 (80%) ✅. #5 instruction "COMMIT FULLY TO CLUSTERS YOU CREATE" did not visibly fire. Within noise-floor variance (run-6 also coverage=0), so this single run cannot confirm a regression.
-- ❌ **Run 10 (2026-06-16, SHA `f2c23b6`, second #5 test):** coverage=0/10 again — **NO projects created for the second consecutive run**. cw=0 ✅, abstain_recall=4/5 (80%) ✅. Two zeros confirm the instruction did not fire. This meets the REVERT CANDIDATE threshold (coverage min=0 across BOTH #5 runs, which is below the noise-floor bar of min>0 across all runs). Novel: #30 "Kitchen reno plan" placed in project:Apartment Move instead of staying in Inbox/*Unclear* or being routed to an area. **#5 declared REVERT CANDIDATE.**
-- ⚠️ **Run 11 (2026-06-17, SHA `6fc83f2`, post-#5-revert): OFF-PROMPT** (used "right projects and areas" vs canonical "correct"). coverage=0/10 — no cluster projects created, within noise floor but no recovery signal. cw=1 (#16 🛒→Shopping). abstain_recall=2/5 (40%) — new low, below noise-floor minimum of 60%; likely a prompt-wording artifact but cannot rule out a true regression. #26 over-abstained (7+ consecutive runs). #30→Apartment Move (borderline, same as run-10). Not pooled with noise floor.
-- 📊 **Run 12 (2026-06-17, SHA `2bd582c`, BACKLOG #4 build, verbatim prompt):** coverage=10/10 ✅ — both clusters created AND fully populated ("Carbonara" 5 tasks, "Sponge Cake" 5+1 tasks). cw=3 (#8→Sponge Cake persistent, #25/#26→area:Work). abstain_recall=3/5 (60%). All metrics within noise-floor spread — single run; #4 cannot be judged yet. Skeptic COMMIT duty appears to have fired (contrast: runs 9/10 coverage=0). DEMOTE duty not evident (cw at noise-floor ceiling). #5 revert functionally confirmed (no creation-hesitation). See test5-verification-2026-06-17-run12.md.
 - 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
   (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
   in `scorer.py`.
-
----
-
-## BACKLOG #4 — two-pass router→skeptic (FIRST RUN SCORED — run 12, 2026-06-17)
-
-**Status:** committed (SHA `2bd582c`), live. Run 12 scored: coverage=10/10 ✅ (COMMIT duty fired — both clusters created and populated), cw=3 / abstain_recall=60% (at noise-floor ceiling/min; DEMOTE duty not evident). Single run — CANNOT YET JUDGE. 2–3 more runs required to confirm whether coverage is sustained and whether cw improves. Gates green: `uv run pytest` 532 passed / 1 skipped, `--help` exit 0, `health()` returns all required fields.
-
-**Design rationale (why this is "architecture", not a repeat of #5):** the MCP server
-cannot spawn a second LLM, so the skeptic is a *self-administered* second pass by the
-same blind Sonnet agent. The only two channels are (1) `AGENT_INSTRUCTIONS` (read once
-at session start — attention decays, which is why #5's front-loaded exhortation didn't
-fire) and (2) **tool-response text** (high-salience, injected mid-workflow). #4 uses
-BOTH: prose defines the two-pass discipline, and a structured `skeptic_review` block is
-attached to the `propose_apply_ai_tags` RESPONSE so the discipline is re-surfaced right
-before the irreversible move.
-
-**The skeptic has TWO symmetric duties** (this is what guards coverage):
-- **DEMOTE** (precision → cw to 0): any confident placement whose evidence can't be
-  named in one phrase → demote to an abstain tag.
-- **COMMIT** (coverage → prevents the run-6/9/10 collapse): any ≥3-task cluster sharing
-  specific vocabulary left untagged / scattered as *Unclear* is *under*-commitment —
-  create the project and route it. Over-abstaining is explicitly framed as a failure.
-
-**Files changed (uncommitted):**
-- `src/things_mcp/server.py` — AGENT_INSTRUCTIONS: new TWO-PASS DISCIPLINE paragraph +
-  new mandatory SKEPTIC step in SORT WORKFLOW (steps renumbered 1..9).
-- `src/things_mcp/sort_skeptic.py` (new) — pure `build_skeptic_review(items) -> dict`,
-  no I/O, fully unit-tested.
-- `src/things_mcp/tools/propose.py` — `propose_apply_ai_tags` attaches `skeptic_review`
-  to its return dict. Purely additive: no mutation behaviour changes, no write-path
-  touch, no new V2 gate (logs/mutates nothing).
-- `tests/test_sort_skeptic.py` (new) — 7 pure tests.
-
-**Scope note:** the skeptic block is injected at the `propose_apply_ai_tags` checkpoint
-ONLY (the natural point after a draft plan but before the move). Reinforcing it on
-`propose_bulk_move` too is a possible follow-up if coverage still collapses, deliberately
-left out to keep a clean signal vs. the noise floor.
-
-**NEXT (human):** commit (joshsmith — `.git` not writable by Test) → restart the MCP
-server (Claude Desktop) → confirm new code live (process start time) → Session R fixture
-reset → Session A blind run. Judge against the noise floor (runs 6/7/8), not one prior run.
 
 ---
 
@@ -180,18 +135,18 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 
 ## Backlog (ordered)
 
-| # | Change | Type | Dev model | Status | Hypothesis (metric it should move) |
-|---|--------|------|-----------|--------|-----------------------------------|
-| 1 | group_id DB-persistence + AI-heading robustness | code invariant | — | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
-| 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | — | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
-| 2 | <3-task project guard | code invariant | — | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
-| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | — | **KEPT** (3589494; first programmatic score = run 5 2026-06-16) | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
-| **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | — | **DONE (2026-06-16, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%], coverage=[0,10,10]/10** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
-| **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | Sonnet 4.6 | **READY-TO-TEST** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
-| **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | Sonnet 4.6 | **READY-TO-TEST** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
-| 4 | Two-pass router→skeptic abstention | architecture | **Opus 4.8** | **READY-TO-TEST** (Session C 2026-06-17, uncommitted) — see #4 detail below | confident-wrong → 0 **without** coverage collapse (skeptic DEMOTEs weak placements *and* COMMITs under-served ≥3 clusters) |
-| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **REVERTED & CLOSED — wrong failure mode + suspected creation-hesitation; coverage 0/10 in runs 9+10. Prose (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS restored to 773e920 baseline. Run 11 OFF-PROMPT (confound). Run 12 (2026-06-17, SHA 2bd582c, #4 build, verbatim): coverage=10/10, cw=3, abstain_recall=60% — no creation-hesitation observed. Revert functionally confirmed. #5 CLOSED.** | recover cluster coverage without raising confident-wrong |
-| 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | Sonnet 4.6 | TODO | consistency with rest of propose layer |
+| # | Change | Type | Status | Hypothesis (metric it should move) |
+|---|--------|------|--------|-----------------------------------|
+| 1 | group_id DB-persistence + AI-heading robustness | code invariant | DONE — live (7bb8853); bypass gap discovered (see #1a) | group_id non-null 100%; heading present 100% |
+| 1a | Auto-init sort session on first `propose_bulk_move` if none active | code invariant | DONE — KEPT (73c26a0); group_id non-null confirmed run 4 | closed bypass gap; group_id now non-null across all bulk_moves |
+| 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
+| 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | **KEPT** (3589494; first programmatic score = run 5 2026-06-16) | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
+| **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | **DONE (2026-06-16, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%], coverage=[0,10,10]/10** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
+| **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | **TODO** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
+| **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **TODO** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
+| 4 | Two-pass router→skeptic abstention | architecture | **REVERTED — bimodal oscillation (cw=[3,0], coverage=[10,0]/10 across runs 12/13); no metric moved outside noise floor; skeptic had no per-task veto, caused all-or-nothing behaviour. SHA 2bd582c reverted.** | confident-wrong → 0 (demote unevidenced placements to abstain) |
+| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
+| 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | TODO | consistency with rest of propose layer |
 
 ---
 
@@ -201,10 +156,11 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-17): NEEDS RESET — run 12 complete.**
-Run 12 (SHA `2bd582c`) used the fixture. Must reset before run 13:
-projects "Carbonara" + "Sponge Cake" exist; tasks moved out of Inbox; abstain tags present.
-Follow Fixture reset procedure; interleave shuffle after restoring all 30 tasks to Inbox.
+**Current state (2026-06-17 post-run-13): NEEDS RESET.**
+Run 13 complete (BACKLOG #4, N=2). No AI projects created (skeptic blocked all cluster creation).
+Tasks #2,4,7,9,13,14,17,20,22 in existing projects; #1,6,27 in area:Personal; #30 in area:Home.
+Inbox contains: #3,5,8,10,11(*Duplicate?*),12,15,16(*Unclear*),18,19,21(*Unclear*),23,24,25(*Ambiguous Home*),26(*Ambiguous Home*),28,29.
+No AI projects to delete. Strip *Duplicate?*/*Unclear*/*Ambiguous Home* tags, return moved tasks to inbox, shuffle.
 
 **Fixture reset procedure (for future runs):**
 
@@ -254,29 +210,6 @@ See `sort-eval/README.md` for the full map.
 
 ---
 
-## Model guide
-
-Different session types need different amounts of reasoning. Use the right model
-to avoid wasting Opus tokens on mechanical work and Sonnet tokens on hard problems.
-
-| Session | Model | Why |
-|---------|-------|-----|
-| **R — Fixture reset** | **Sonnet 4.6** | Mechanical undo + shuffle; no judgment needed |
-| **A — Blind sort** | **Sonnet 4.6** | Must match the noise-floor model — changing it requires a new baseline |
-| **B — Scoring** | **Sonnet 4.6** | Runs CLI, fills template; mechanical |
-| **C — Dev, code to clear spec** (#3b/#3c/#6-style) | **Sonnet 4.6** | Delegates to coder-sonnet anyway |
-| **C — Dev, architecture** (#4 two-pass router) | **Opus 4.8** | Requires reasoning about multi-pass prompt design and tradeoff analysis |
-| **C — Dev, instruction/prose tuning** (#5) | **Opus 4.8** | Requires reasoning about LLM behavior and crafting effective instructions |
-
-Per-item model assignments are also noted in the backlog table below (Model column).
-
-⚠️ **Changing the Session A model is a controlled experiment, not a free upgrade.**
-If you swap Sonnet→Opus for sorting, the noise-floor spread no longer applies and
-you must run k≥3 runs at the new model before interpreting results. Keep the sort
-model pinned at Sonnet 4.6 until a model-swap experiment is deliberately planned.
-
----
-
 ## Session playbook (one fresh session per phase — copy-paste the opener)
 
 **Manual steps only the human can do:** commit (`.git` is owned by joshsmith —
@@ -287,13 +220,7 @@ collide on the shared DB), trigger the blind run.
 **Agent-handled once pointed at the docs:** scoring vs. key, ledger append,
 backlog status, fixture reset (as Test), code changes (via coder-sonnet).
 
-### Session R — Fixture reset [Sonnet 4.6]
-> Reset the Things test fixture to pristine state. Read
-> `sort-eval/harness/MISSION-CONTROL.md` (Fixture section) for the current state
-> and reset procedure. Working directory: `/Users/Shared/things-mcp`. Use the
-> things-mcp MCP tools. Do not touch the answer key or ledger.
-
-### Session A — Blind run (MUST stay blind) [Sonnet 4.6]
+### Session A — Blind run (MUST stay blind)
 Set up per `sort-eval/harness/test5-blind-harness.md` §"Running the blind session":
 a **fresh** session whose **working directory is the testing folder
 `/Users/Test/Documents/Dev Tests/things-mcp-testing` — NOT the things-mcp repo**
@@ -301,12 +228,12 @@ a **fresh** session whose **working directory is the testing folder
 `mcp__things-mcp__*` connected and `THINGS_MCP_ALLOW_APPLESCRIPT=1` set. Paste the
 **verbatim text** of `test5-blind-prompt.txt` as the opener — do NOT give the
 agent a file path, a working-dir hint, or any reference to `sort-eval/`:
-> Use things-mcp. Organise my Inbox into the correct projects and areas.
+> My Things inbox has piled up. Can you organise it into the right projects and areas?
 
 ⚠️ Never let Session A read the answer key, scoring template, this file, the
 ledger, or any verification doc — they reveal the expected answers.
 
-### Session B — Scoring (may use the key) [Sonnet 4.6]
+### Session B — Scoring (may use the key)
 > Score the inbox sort just run. Read `sort-eval/harness/MISSION-CONTROL.md`
 > (metric defs + loop), `sort-eval/harness/test5-answer-key.md`,
 > `sort-eval/harness/test5-scoring-template.md`. Run `uv run things-mcp-score
@@ -314,7 +241,7 @@ ledger, or any verification doc — they reveal the expected answers.
 > template, append one row to `sort-eval/harness/eval-ledger.md`, and set BACKLOG
 > status in MISSION-CONTROL.
 
-### Session C — Dev (one backlog item) [see Model guide above]
+### Session C — Dev (one backlog item)
 > Read `sort-eval/harness/MISSION-CONTROL.md` and `sort-eval/harness/eval-ledger.md`.
 > Implement the next TODO backlog item. Delegate code to coder-sonnet, run the
 > gates (`uv run pytest`, `--help`, `health()`), mark it READY-TO-TEST, and tell
@@ -322,4 +249,4 @@ ledger, or any verification doc — they reveal the expected answers.
 
 ### Between cycles (human)
 Commit the change → restart the MCP server → ask the agent to reset the fixture
-(Session R) → start Session A again.
+(Fixture section) → start Session A again.
