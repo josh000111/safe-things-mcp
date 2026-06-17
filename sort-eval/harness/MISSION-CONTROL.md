@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-17 (BACKLOG #4 two-pass router→skeptic implemented & gates green — Session C; READY-TO-TEST, uncommitted. See "BACKLOG #4" detail block below. Prior entry: Run 11 scored — Session B. OFF-PROMPT run on post-#5-revert baseline (SHA 6fc83f2 = 773e920 AGENT_INSTRUCTIONS). coverage=0/10 (within noise floor), cw=1, abstain_recall=2/5 (40%, below noise-floor min). Not pooled with noise floor. Verbatim-prompt run 12 still owed to confirm revert. See test5-verification-2026-06-17-run11.md.)
+**Last updated:** 2026-06-17 (Run 12 scored — Session B. FIRST run on BACKLOG #4 build (SHA 2bd582c). coverage=10/10 ✅ (skeptic COMMIT duty fired), cw=3 (at noise-floor ceiling; DEMOTE duty not evident), abstain_recall=3/5 (60%, at noise-floor min). Single run — #4 cannot be judged yet; 2–3 more runs needed. #5 functionally closed (no creation-hesitation). See test5-verification-2026-06-17-run12.md. Prior: BACKLOG #4 two-pass router→skeptic implemented & gates green — Session C.)
 
 ---
 
@@ -112,18 +112,17 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
 
 - ⚠️ **Run 9 (2026-06-16, SHA `f2c23b6`, first #5 test):** coverage=0/10 — the agent created **no new projects** (worse than run-6 which created empty projects). cw=0 ✅, abstain_recall=4/5 (80%) ✅. #5 instruction "COMMIT FULLY TO CLUSTERS YOU CREATE" did not visibly fire. Within noise-floor variance (run-6 also coverage=0), so this single run cannot confirm a regression.
 - ❌ **Run 10 (2026-06-16, SHA `f2c23b6`, second #5 test):** coverage=0/10 again — **NO projects created for the second consecutive run**. cw=0 ✅, abstain_recall=4/5 (80%) ✅. Two zeros confirm the instruction did not fire. This meets the REVERT CANDIDATE threshold (coverage min=0 across BOTH #5 runs, which is below the noise-floor bar of min>0 across all runs). Novel: #30 "Kitchen reno plan" placed in project:Apartment Move instead of staying in Inbox/*Unclear* or being routed to an area. **#5 declared REVERT CANDIDATE.**
-- ⚠️ **Run 11 (2026-06-17, SHA `6fc83f2`, post-#5-revert): OFF-PROMPT** (used "right projects and areas" vs canonical "correct"). coverage=0/10 — no cluster projects created, within noise floor but no recovery signal. cw=1 (#16 🛒→Shopping). abstain_recall=2/5 (40%) — new low, below noise-floor minimum of 60%; likely a prompt-wording artifact but cannot rule out a true regression. #26 over-abstained (7+ consecutive runs). #30→Apartment Move (borderline, same as run-10). **Verbatim-prompt run 12 still required before BACKLOG #5 can close.**
+- ⚠️ **Run 11 (2026-06-17, SHA `6fc83f2`, post-#5-revert): OFF-PROMPT** (used "right projects and areas" vs canonical "correct"). coverage=0/10 — no cluster projects created, within noise floor but no recovery signal. cw=1 (#16 🛒→Shopping). abstain_recall=2/5 (40%) — new low, below noise-floor minimum of 60%; likely a prompt-wording artifact but cannot rule out a true regression. #26 over-abstained (7+ consecutive runs). #30→Apartment Move (borderline, same as run-10). Not pooled with noise floor.
+- 📊 **Run 12 (2026-06-17, SHA `2bd582c`, BACKLOG #4 build, verbatim prompt):** coverage=10/10 ✅ — both clusters created AND fully populated ("Carbonara" 5 tasks, "Sponge Cake" 5+1 tasks). cw=3 (#8→Sponge Cake persistent, #25/#26→area:Work). abstain_recall=3/5 (60%). All metrics within noise-floor spread — single run; #4 cannot be judged yet. Skeptic COMMIT duty appears to have fired (contrast: runs 9/10 coverage=0). DEMOTE duty not evident (cw at noise-floor ceiling). #5 revert functionally confirmed (no creation-hesitation). See test5-verification-2026-06-17-run12.md.
 - 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
   (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
   in `scorer.py`.
 
 ---
 
-## BACKLOG #4 — two-pass router→skeptic (READY-TO-TEST, uncommitted 2026-06-17)
+## BACKLOG #4 — two-pass router→skeptic (FIRST RUN SCORED — run 12, 2026-06-17)
 
-**Status:** code complete on disk, NOT yet committed, NOT yet live (server still runs
-old code). Gates green: `uv run pytest` 532 passed / 1 skipped, `--help` exit 0,
-`health()` returns all required fields.
+**Status:** committed (SHA `2bd582c`), live. Run 12 scored: coverage=10/10 ✅ (COMMIT duty fired — both clusters created and populated), cw=3 / abstain_recall=60% (at noise-floor ceiling/min; DEMOTE duty not evident). Single run — CANNOT YET JUDGE. 2–3 more runs required to confirm whether coverage is sustained and whether cw improves. Gates green: `uv run pytest` 532 passed / 1 skipped, `--help` exit 0, `health()` returns all required fields.
 
 **Design rationale (why this is "architecture", not a repeat of #5):** the MCP server
 cannot spawn a second LLM, so the skeptic is a *self-administered* second pass by the
@@ -191,7 +190,7 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | Sonnet 4.6 | **READY-TO-TEST** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
 | **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | Sonnet 4.6 | **READY-TO-TEST** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
 | 4 | Two-pass router→skeptic abstention | architecture | **Opus 4.8** | **READY-TO-TEST** (Session C 2026-06-17, uncommitted) — see #4 detail below | confident-wrong → 0 **without** coverage collapse (skeptic DEMOTEs weak placements *and* COMMITs under-served ≥3 clusters) |
-| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **REVERTED — wrong failure mode + suspected creation-hesitation; coverage 0/10 in runs 9+10. Prose (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS restored to 773e920 baseline. Run 11 (2026-06-17, SHA 6fc83f2): OFF-PROMPT confound — coverage=0/10 (within noise floor but no recovery signal), cw=1, abstain_recall=40% (below floor, may be prompt artifact). Cannot confirm revert effectiveness from run 11 alone. RECOMMENDATION: run verbatim-prompt run 12 before declaring KEPT-as-baseline or escalating to #4. If run 12 shows coverage∈[0,10] and abstain_recall≥60% → KEPT-as-baseline (revert worked, #5 closed). If coverage=0 again across both canonical runs → escalate to BACKLOG #4 (two-pass router).** | recover cluster coverage without raising confident-wrong |
+| 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | **Opus 4.8** | **REVERTED & CLOSED — wrong failure mode + suspected creation-hesitation; coverage 0/10 in runs 9+10. Prose (SHA f2c23b6) backed out; AGENT_INSTRUCTIONS restored to 773e920 baseline. Run 11 OFF-PROMPT (confound). Run 12 (2026-06-17, SHA 2bd582c, #4 build, verbatim): coverage=10/10, cw=3, abstain_recall=60% — no creation-hesitation observed. Revert functionally confirmed. #5 CLOSED.** | recover cluster coverage without raising confident-wrong |
 | 6 | Standardize `validation_error` shape (raise vs dict) | cleanup | Sonnet 4.6 | TODO | consistency with rest of propose layer |
 
 ---
@@ -202,10 +201,10 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-17): pristine — ready for run 11.**
-All 30 tasks in Inbox, no AI-created projects, no tags, interleaved shuffle applied (no two
-same-cluster tasks adjacent). Reset completed by Session R after run 10 (BACKLOG #5 reverted;
-AGENT_INSTRUCTIONS restored to 773e920 baseline). Sentinel "5A-HARDDELETE-1781649852" removed.
+**Current state (2026-06-17): NEEDS RESET — run 12 complete.**
+Run 12 (SHA `2bd582c`) used the fixture. Must reset before run 13:
+projects "Carbonara" + "Sponge Cake" exist; tasks moved out of Inbox; abstain tags present.
+Follow Fixture reset procedure; interleave shuffle after restoring all 30 tasks to Inbox.
 
 **Fixture reset procedure (for future runs):**
 
