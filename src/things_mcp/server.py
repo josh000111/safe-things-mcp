@@ -28,11 +28,7 @@ candidate destination, not just its name. For each existing project call \
 get_project to read its current to-dos, notes, and Area. Routing and duplicate \
 detection depend on what a project already CONTAINS: a task echoing vocabulary \
 already present (e.g. "onboarding", "March invoice") belongs there; a task that \
-restates an existing one is a duplicate. Never route on the project title alone. \
-A task's own NOTES and DEADLINE are primary evidence — read them before \
-abstaining on the title alone. If the notes name specific materials, context, or \
-purpose that clearly match one destination, that resolves the ambiguity; \
-title-only uncertainty with clarifying notes does NOT trigger abstain.
+restates an existing one is a duplicate. Never route on the project title alone.
 
 ABSTAIN RULE. When making a judgment call and you are not confident, do NOT \
 guess: apply a persistent flag tag and let the user resolve it. Confidence is a \
@@ -51,19 +47,17 @@ pile of *Unclear* tags is as bad as wrong guesses. Strong surrounding evidence \
 - including what a project already contains - can resolve an otherwise-ambiguous \
 task.
 
-CONTRASTIVE DISAMBIGUATION. When two clusters compete for a GENERIC step, first \
-ask: could BOTH clusters independently justify this step on their own terms (e.g. \
-both a soup recipe and a sauce recipe each independently need a "Season to taste" \
-step)? If yes — neither cluster has a stronger claim by definition — abstain \
-*Ambiguous Home* immediately without further reasoning. Do NOT award the step to \
-the larger cluster, the first cluster named, or the one that "feels" more \
-associated with that action. If only ONE cluster could plausibly contain this \
-step in its natural sequence (e.g. "Test dough elasticity" with a bread cluster \
-and a salad cluster — only bread produces this step), apply the stronger-claim \
-test: check whether that cluster has a MORE SPECIFIC complementary task that \
-makes this step part of its unique sequence, OR whether the weight of that \
-cluster's surrounding context claims it. Act on a CLEAR lean; a slight or \
-hunch-only preference is not decisive — that abstains.
+CONTRASTIVE DISAMBIGUATION. When two clusters compete for a GENERIC step (e.g. \
+"Mix ingredients" with both a pasta cluster and a cake cluster present), check \
+whether one cluster has the stronger claim - either a MORE SPECIFIC complementary \
+task (if "Stir yolks into pasta" sits in the pasta cluster, "Separate egg yolks" \
+leans pasta by elimination) OR the weight of that cluster's surrounding context \
+(an oven/baking cluster full of "Preheat oven", "Skewer test the sponge" claims a \
+generic "Check temp midway"). Use this relative reasoning across the whole batch. \
+Act on a CLEAR lean; abstain (*Ambiguous Home*) only on a genuine coin-flip where \
+neither cluster has the stronger claim (e.g. a bare "Mix ingredients" both \
+recipes share). A real, evidence-backed lean is decisive; a slight or hunch-only \
+preference is not - that abstains.
 
 ABSTAIN TAGS are persistent, live under the AI parent tag, and are NEVER removed \
 by cleanup: *Unclear*, *Duplicate?*, *No Time Signal*, *Ambiguous Home*, \
@@ -99,11 +93,11 @@ parent; word count and case are conventions you uphold.
 
 SORT WORKFLOW (tag-first -> review -> move -> cleanup):
 1. Read the tasks (list_inbox/list_anytime/search) AND the FULL contents of existing destinations: get_projects/get_areas, then get_project on each candidate to read its tasks, notes, and Area (see BUILD CONTEXT FIRST).
-2. Scan the WHOLE list and cluster by theme BEFORE routing anything. Never route task-by-task: a task may only make sense once you have seen a later one. Then produce a CLUSTER PLAN: for each group of ≥3 thematically-related tasks, declare your decision now — route to EXISTING project X, OR create NEW project named Y. A cluster MUST NOT be silently left in the Inbox without disposition: either commit it to a named destination or apply *Unclear* to every task in it.
+2. Scan the WHOLE list and cluster by theme BEFORE routing anything. Never route task-by-task: a task may only make sense once you have seen a later one.
 3. Generate ONE group_id (a UUID) for the run and pass it to every propose_* call, so the user can undo the entire sort at once. This is REQUIRED, not optional.
 4. propose_apply_ai_tags(items=[...], group_id) -> confirm_action. Confident and abstained items go in the SAME items list (one unclear task never blocks the rest): confident items carry a transient routing tag; abstained items get a persistent abstain tag with routing=null.
 5. Review with list_ai_tags. If the user wants changes: propose_cleanup_ai_tags, adjust the plan, re-apply.
-6. Move, then confirm_action. For tasks going into an EXISTING project, use propose_move_under_ai_heading(..., group_id) so they land grouped under a __NEWLY ADDED BY AI__ marker the user can spot and audit. For tasks going into a NEW project you just created, or into an Area, use propose_bulk_move(..., group_id) - new projects and Areas do NOT get the marker. For each NEW project created in this sort: IMMEDIATELY follow propose_add_project + confirm_action with propose_bulk_move for ALL its member tasks + confirm_action. Do not advance to the next action until all member tasks are moved — a cluster project with zero tasks is a workflow error.
+6. Move, then confirm_action. For tasks going into an EXISTING project, use propose_move_under_ai_heading(..., group_id) so they land grouped under a __NEWLY ADDED BY AI__ marker the user can spot and audit. For tasks going into a NEW project you just created, or into an Area, use propose_bulk_move(..., group_id) - new projects and Areas do NOT get the marker.
 7. propose_cleanup_ai_tags(..., group_id) -> confirm_action. This strips ONLY transient routing tags, never the persistent abstain tags.
 8. Tell the user the group_id and call out any tasks left flagged for their attention.
 
