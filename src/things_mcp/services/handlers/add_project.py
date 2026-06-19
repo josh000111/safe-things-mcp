@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from ... import config
 from .. import things_repo, url_scheme
 from ...state import sort_session, undo_log
+from . import bulk_move
 
 KIND = "add_project"
 
@@ -41,17 +42,25 @@ def make_preview(payload: dict) -> str:
         bits.append(f"tags={','.join(payload['tags'])}")
     if payload.get("headings"):
         bits.append(f"headings=[{len(payload['headings'])} sections]")
+    if payload.get("member_todo_ids"):
+        bits.append(f"+ populate {len(payload['member_todo_ids'])} tasks")
     return ", ".join(bits)
 
 
 async def execute(payload: dict) -> dict:
     title = payload["title"]
 
+    # Capture group_id before any mutation so both undo_log entries share it.
+    # undo_group(group_id) will then reverse them LIFO: bulk_move first (tasks
+    # back to Inbox), then add_project (project cancelled) — correct order.
+    group_id = sort_session.active()
+
     entry_id = undo_log.record(
         action_kind=KIND,
         target_uuid=None,
         before_state=None,
         after_state=None,
+        group_id=group_id,
     )
 
     created_after = (datetime.now() - _CLOCK_SLACK).strftime(_CREATED_FMT)
@@ -76,6 +85,18 @@ async def execute(payload: dict) -> dict:
     # propose_bulk_move's auto-promote excludes it.
     sort_session.register_created_project(verified["uuid"])
 
+    # Atomic populate: move member_todo_ids into the new project immediately.
+    # This makes an empty cluster-project structurally impossible when the
+    # agent supplies the task list (which it always does during a sort).
+    member_todo_ids = payload.get("member_todo_ids") or []
+    populate_result = None
+    if member_todo_ids:
+        populate_result = await bulk_move.execute({
+            "todo_ids": member_todo_ids,
+            "target": verified["uuid"],
+            "group_id": group_id,
+        })
+
     return {
         "action_kind": KIND,
         "undo_id": entry_id,
@@ -83,6 +104,8 @@ async def execute(payload: dict) -> dict:
         "title": verified.get("title", title),
         "created_at": verified.get("created", created_after),
         "headings_count": len(payload.get("headings") or []),
+        "populated_count": len(member_todo_ids),
+        "populate_undo_id": populate_result["undo_id"] if populate_result else None,
     }
 
 

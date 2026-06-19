@@ -12,6 +12,11 @@ from .tools import confirm, meta, propose, read, undo, write
 # docs/ai-tagging-guidance.md — that doc is the human-maintained source of
 # truth and does NOT ship with the package, so anything the agent must obey at
 # runtime has to live here. Keep this in sync with the doc when rules change.
+# CONTAMINATION GUARD: the worked examples below deliberately use a NON-fixture
+# domain (garden/pool, "book club"/"tax return", "Errands") so they cannot leak
+# answers into the sort eval (sort-eval/ test5). docs/ai-tagging-guidance.md still
+# uses the old cooking examples (carbonara/cake) — sync the RULES from it, never
+# the example nouns. See docs/sort-issues-tracker.md issue B1.
 AGENT_INSTRUCTIONS = """\
 things-mcp controls Things 3 on macOS. Reads are safe. All writes go through \
 propose_* -> confirm_action, and every mutation is logged so undo()/undo_group() \
@@ -27,7 +32,7 @@ BUILD CONTEXT FIRST. Before routing anything, load the FULL context of every \
 candidate destination, not just its name. For each existing project call \
 get_project to read its current to-dos, notes, and Area. Routing and duplicate \
 detection depend on what a project already CONTAINS: a task echoing vocabulary \
-already present (e.g. "onboarding", "March invoice") belongs there; a task that \
+already present (e.g. "book club", "tax return") belongs there; a task that \
 restates an existing one is a duplicate. Never route on the project title alone.
 
 ABSTAIN RULE. When making a judgment call and you are not confident, do NOT \
@@ -48,16 +53,16 @@ pile of *Unclear* tags is as bad as wrong guesses. Strong surrounding evidence \
 task.
 
 CONTRASTIVE DISAMBIGUATION. When two clusters compete for a GENERIC step (e.g. \
-"Mix ingredients" with both a pasta cluster and a cake cluster present), check \
-whether one cluster has the stronger claim - either a MORE SPECIFIC complementary \
-task (if "Stir yolks into pasta" sits in the pasta cluster, "Separate egg yolks" \
-leans pasta by elimination) OR the weight of that cluster's surrounding context \
-(an oven/baking cluster full of "Preheat oven", "Skewer test the sponge" claims a \
-generic "Check temp midway"). Use this relative reasoning across the whole batch. \
-Act on a CLEAR lean; abstain (*Ambiguous Home*) only on a genuine coin-flip where \
-neither cluster has the stronger claim (e.g. a bare "Mix ingredients" both \
-recipes share). A real, evidence-backed lean is decisive; a slight or hunch-only \
-preference is not - that abstains.
+"Coil up the hose" with both a rose-bed cluster and a swimming-pool cluster \
+present), check whether one cluster has the stronger claim - either a MORE \
+SPECIFIC complementary task (if "Balance the chlorine" sits in the pool cluster, \
+"Test the water" leans pool by elimination) OR the weight of that cluster's \
+surrounding context (a pool cluster full of "Skim the leaves off", "Backwash the \
+filter" claims a generic "Top up the level"). Use this relative reasoning across \
+the whole batch. Act on a CLEAR lean; abstain (*Ambiguous Home*) only on a \
+genuine coin-flip where neither cluster has the stronger claim (e.g. a bare "Coil \
+up the hose" both chores share). A real, evidence-backed lean is decisive; a \
+slight or hunch-only preference is not - that abstains.
 
 ABSTAIN TAGS are persistent, live under the AI parent tag, and are NEVER removed \
 by cleanup: *Unclear*, *Duplicate?*, *No Time Signal*, *Ambiguous Home*, \
@@ -102,7 +107,7 @@ SORT WORKFLOW (tag-first -> review -> move -> cleanup):
 8. Tell the user the group_id and call out any tasks left flagged for their attention.
 
 DISAMBIGUATION. When two projects/areas share a name, always qualify which one \
-in previews and confirmations, e.g. "Shopping - in Area 'Home'" vs "Shopping - a \
+in previews and confirmations, e.g. "Errands - in Area 'Personal'" vs "Errands - a \
 standalone project (not in any Area)".
 
 UNDO. undo_group(group_id) reverses a whole sort in LIFO order; undo() or \

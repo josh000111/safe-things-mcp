@@ -77,11 +77,12 @@ CREATE INDEX IF NOT EXISTS idx_sort_session_project_group
     ON sort_session_project(group_id);
 
 CREATE TABLE IF NOT EXISTS sort_guard_rejected (
-    id           TEXT PRIMARY KEY,
-    group_id     TEXT NOT NULL,
-    title        TEXT NOT NULL,
-    member_count INTEGER NOT NULL,
-    rejected_at  TEXT NOT NULL
+    id            TEXT PRIMARY KEY,
+    group_id      TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    member_count  INTEGER NOT NULL,
+    task_ids_json TEXT NOT NULL DEFAULT '[]',
+    rejected_at   TEXT NOT NULL
 );
 """
 
@@ -90,6 +91,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """Apply additive schema migrations to an existing DB."""
     try:
         conn.execute("ALTER TABLE undo_log ADD COLUMN group_id TEXT")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column name" not in str(exc):
+            raise
+    try:
+        conn.execute("ALTER TABLE sort_guard_rejected ADD COLUMN task_ids_json TEXT NOT NULL DEFAULT '[]'")
     except sqlite3.OperationalError as exc:
         if "duplicate column name" not in str(exc):
             raise

@@ -167,6 +167,14 @@ class ProposeAddProjectInput(BaseModel):
             "through the things:///json endpoint."
         ),
     )
+    member_todo_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Task UUIDs to move into the project immediately after creation "
+            "(atomic populate). Passed through to the handler; the ≥3-task "
+            "guard in propose_add_project enforces the minimum during a sort."
+        ),
+    )
 
 
 class ProposeUpdateProjectInput(BaseModel):

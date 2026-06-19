@@ -226,7 +226,7 @@ async def propose_add_project(
     if sort_session.active() is not None:
         count = len(member_todo_ids) if member_todo_ids else 0
         if count < 3:
-            sort_session.record_rejected_project(title, count)
+            sort_session.record_rejected_project(title, member_todo_ids)
             return {
                 "validation_error": True,
                 "message": (
@@ -247,6 +247,7 @@ async def propose_add_project(
         notes=notes,
         tags=tags,
         headings=headings,
+        member_todo_ids=member_todo_ids,
     )
     payload = payload_model.model_dump()
     preview = handlers.add_project.make_preview(payload)

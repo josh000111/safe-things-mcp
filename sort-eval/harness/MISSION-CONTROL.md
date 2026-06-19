@@ -5,7 +5,7 @@ inbox-sort. **Any fresh Claude session can resume from this file alone.** Do not
 rely on a long-lived chat session — durable state lives here and in
 `eval-ledger.md`.
 
-**Last updated:** 2026-06-17 (BACKLOG #6 REVERTED — run 14 cw=12, 4× above noise-floor ceiling; novel failure: all cluster tasks → area:Personal)
+**Last updated:** 2026-06-18 (run 15 — post-#6-revert confirmation; cw=1, abstain=80%, coverage=0/10; empty-project failure; all metrics within noise floor)
 
 ---
 
@@ -116,6 +116,12 @@ tasks 2026-06-14). Always run write-path work as the `Test` user (`whoami`).
   Abstain-recall (4/5) and routing-acc (9/10) unaffected. Single run was sufficient to
   revert given cw=12 is 4× above noise-floor ceiling of 3. See
   test5-verification-2026-06-17-run14.md.
+- 📊 **Run 15 (2026-06-18, SHA f446582 = 773e920 baseline).** Post-#6-revert confirmation
+  run. cw=1 (#26→area:Work), abstain_recall=4/5 (80%), coverage=0/10. All within noise
+  floor. Empty-project failure again (same as run 6): "Make Carbonara" + "Bake Sponge Cake"
+  created but both empty; all 10 cluster tasks left in Inbox untagged. group_id non-null ✅.
+  #3c first live data: sort_guard_rejected=0 (guard never triggered this run). See
+  test5-verification-2026-06-18.md.
 
 - 📂 Docs reorganized 2026-06-16 into `sort-eval/{harness,runs,archive}`
   (was the flat `tests-2/`). See `sort-eval/README.md`. Scorer key path updated
@@ -149,8 +155,8 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 | 2 | <3-task project guard | code invariant | DONE — live; not triggered (0 new projects in run 3) | kills spurious sub-3 projects (e.g. Eco Packaging) |
 | 3 | Eval harness: programmatic scorer (state vs key → JSON) + scripted fixture reset | tooling | **KEPT** (3589494; first programmatic score = run 5 2026-06-16) | makes N≥5 runs cheap; removes scorer drift; fixes stray-task problem |
 | **3a** | **Noise-floor baseline: run the CURRENT build k≥3× (no code change) and record the spread of cw / abstain-recall / coverage** | **measurement** | **DONE (2026-06-16, runs 6/7/8, SHA 773e920): cw=[0,1,3], abstain=[60%,80%,80%], coverage=[0,10,10]/10** | establishes how big an effect must be to count as real; converts single runs from "anecdote" to "signal" |
-| **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | **TODO** | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
-| **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **TODO** | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
+| **3b** | **Add coverage/yield metric to the scorer** (so abstaining isn't free; see north-star refinement) | **code (scorer)** | **DONE — already fully implemented** (`score()` metrics.coverage dict; ledger rows already show it; no code change needed) | makes "placed nothing" score badly; closes the gameable-by-inaction hole |
+| **3c** | **Log rejected `propose_add_project` attempts** (guard returns a dict, writes nothing) | **code (observability)** | **READY-TO-TEST** — `sort_guard_rejected` table now stores `task_ids_json` (JSON array of submitted UUIDs) alongside `group_id`, `title`, `member_count`, `rejected_at`; migration added for existing DBs; call site in `propose.py` passes `member_todo_ids`; 525 tests pass. **First live data (run 15): sort_guard_rejected=0 rows** — guard was not triggered; agent created 2 projects with the intention of ≥3 tasks (correct), then failed to populate them. Consistent with "agent never moved tasks in" being the root-cause failure, not "guard blocked creation." | distinguishes "agent gave up clustering" from "agent never tried" — currently untraceable post-hoc |
 | 4 | Two-pass router→skeptic abstention | architecture | **REVERTED — bimodal oscillation (cw=[3,0], coverage=[10,0]/10 across runs 12/13); no metric moved outside noise floor; skeptic had no per-task veto, caused all-or-nothing behaviour. SHA 2bd582c reverted.** | confident-wrong → 0 (demote unevidenced placements to abstain) |
 | 5 | Abstain-vs-guess instruction tuning — **re-scope toward *committing* to well-evidenced clusters** (#5/#8/#26/#28) | prose | TODO — **after #3a** | recover cluster coverage without raising confident-wrong |
 | **6** | **Three-part instruction patch** (notes-first rule; mandatory coin-flip abstain; cluster-plan + empty-project guard in workflow) | **prose** | **REVERTED — cw=12 (run 14, 83eabe5), 4× above noise-floor ceiling of 3. Novel failure: agent used area:Personal as catch-all for all 10 cluster tasks instead of creating projects. Zero projects created. Abstain-recall + routing unaffected. Single run sufficient to revert given magnitude.** | #26 fix: notes resolve title ambiguity; #8 fix: BOTH-clusters → mandatory *Ambiguous Home*; coverage fix: cluster plan forces commit-or-tag, step-6 guard prevents empty projects |
@@ -164,10 +170,12 @@ Smoke-run against the current (un-reset run-4) live state gave routing 9/10, con
 `test5-blind-harness.md`), original projects in pre-test state, no AI-created
 projects, tasks interleaved so no two tasks from the same cluster are adjacent.
 
-**Current state (2026-06-17 post-run-14): DIRTY — needs reset before run 15.**
-Run 14 (BACKLOG #6) moved 12 tasks to area:Personal; tagged #11 *Duplicate?*, #16/*21
-*Unclear*, #25 *Ambiguous Home*, #26 *Ambiguous Home*. No new AI projects created.
-Must undo run-14 moves and strip remaining abstain tags before next run.
+**Current state (2026-06-18 post-run-15): DIRTY — needs reset before run 16.**
+Run 15 created two empty AI projects ("Make Carbonara", "Bake Sponge Cake" in area:Personal).
+All 10 cluster tasks remain in Inbox untagged. Tasks #1,6,27 in area:Personal; #30 in
+area:Home; #26 in area:Work. Abstain tags: #11 *Duplicate?*, #16/*21 *Unclear*, #25
+*Ambiguous Home*. Must undo run-15 moves, delete the two empty AI projects, and strip
+remaining abstain tags before next run.
 
 **Fixture reset procedure (for future runs):**
 

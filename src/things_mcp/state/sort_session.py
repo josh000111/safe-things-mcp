@@ -31,6 +31,7 @@ Lifecycle
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -248,7 +249,7 @@ def is_ai_created(project_uuid: str) -> bool:
     return row is not None
 
 
-def record_rejected_project(title: str, member_count: int) -> None:
+def record_rejected_project(title: str, task_ids: list[str] | None) -> None:
     """Write a row to sort_guard_rejected when the <3-task guard fires.
 
     No-ops if no sort session is active (guard should only fire during a
@@ -257,12 +258,13 @@ def record_rejected_project(title: str, member_count: int) -> None:
     group = active()
     if group is None:
         return
+    ids = list(task_ids) if task_ids else []
     with connect() as conn:
         conn.execute(
             "INSERT INTO sort_guard_rejected "
-            "(id, group_id, title, member_count, rejected_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (str(uuid.uuid4()), group, title, member_count, _now()),
+            "(id, group_id, title, member_count, task_ids_json, rejected_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), group, title, len(ids), json.dumps(ids), _now()),
         )
 
 
