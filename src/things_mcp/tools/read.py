@@ -16,6 +16,16 @@ def register(mcp: FastMCP) -> None:
         return things_repo.inbox()
 
     @mcp.tool()
+    def inbox_for_sort() -> list[dict[str, Any]]:
+        """Focused Inbox read for sorting.
+
+        Returns one entry per Inbox to-do with the routing-relevant fields
+        only: ``uuid``, ``title``, ``notes``, ``tags``, ``deadline``,
+        ``checklist``. Use in place of ``list_inbox`` when sorting the Inbox.
+        """
+        return things_repo.inbox_for_sort()
+
+    @mcp.tool()
     def list_today() -> list[dict[str, Any]]:
         """To-dos scheduled for Today."""
         return things_repo.today()
