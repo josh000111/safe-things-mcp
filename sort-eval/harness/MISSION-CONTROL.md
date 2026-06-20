@@ -228,6 +228,8 @@ in #3); live `--apply` is still manual (out of scope that crank).
 - Parallel-session collision risk on shared Things / state DB.
 - Run 1 / Run 2 sorting model unconfirmed (Sonnet 4.6?).
 
+**Revert audit (2026-06-20):** `docs/revert-audit-2026-06-20.md` — forensic audit of all REVERTED items (#5, #4, #6, A2). Verdict: ✅ All clear — every revert landed in git before the next change; all run SHAs confirmed; no KEEP/REVERT conclusions need revision.
+
 ## Key files (all under `sort-eval/`)
 
 **`harness/` — persistent apparatus (reused every round):**
