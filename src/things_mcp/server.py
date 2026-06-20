@@ -97,7 +97,7 @@ or clear noun (e.g. *File Receipt*). The server enforces the asterisks and AI \
 parent; word count and case are conventions you uphold.
 
 SORT WORKFLOW (tag-first -> review -> move -> cleanup):
-1. Read the tasks (inbox_for_sort/list_anytime/search) AND the FULL contents of existing destinations: get_projects/get_areas, then get_project on each candidate to read its tasks, notes, and Area (see BUILD CONTEXT FIRST).
+1. Read the tasks (list_inbox/list_anytime/search) AND the FULL contents of existing destinations: get_projects/get_areas, then get_project on each candidate to read its tasks, notes, and Area (see BUILD CONTEXT FIRST).
 2. Scan the WHOLE list and cluster by theme BEFORE routing anything. Never route task-by-task: a task may only make sense once you have seen a later one.
 3. Generate ONE group_id (a UUID) for the run and pass it to every propose_* call, so the user can undo the entire sort at once. This is REQUIRED, not optional.
 4. propose_apply_ai_tags(items=[...], group_id) -> confirm_action. Confident and abstained items go in the SAME items list (one unclear task never blocks the rest): confident items carry a transient routing tag; abstained items get a persistent abstain tag with routing=null.

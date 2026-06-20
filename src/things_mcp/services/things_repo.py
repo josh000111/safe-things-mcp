@@ -24,41 +24,6 @@ def inbox() -> list[dict[str, Any]]:
     return things.inbox(**_kw())
 
 
-# Routing-relevant fields kept by inbox_for_sort; everything else
-# (type/status/start/timestamps/indices) is dropped as noise. See
-# docs/handoff-A2-inbox-for-sort.md.
-def _project_for_sort(task: dict[str, Any]) -> dict[str, Any]:
-    checklist = task.get("checklist") or []
-    return {
-        "uuid": task["uuid"],
-        "title": task.get("title"),
-        "notes": task.get("notes") or "",
-        # tags is always present (empty list = "no signal", visibly absent).
-        "tags": list(task.get("tags") or []),
-        "deadline": task.get("deadline"),
-        "checklist": [
-            {"title": c.get("title"), "status": c.get("status")}
-            for c in checklist
-            if isinstance(c, dict)
-        ],
-    }
-
-
-def inbox_for_sort() -> list[dict[str, Any]]:
-    """Inbox to-dos projected to routing-relevant fields only.
-
-    A focused substitute for :func:`inbox` in the sort flow: same one call,
-    smaller payload, with each task reduced to ``{uuid, title, notes, tags,
-    deadline, checklist}`` and the noise fields stripped. Pure projection —
-    computes no destinations and ranks nothing.
-
-    ``include_items=True`` is required so ``checklist`` comes back as the
-    actual items (``things.inbox()`` otherwise returns it as a bool); it adds
-    no extra round-trips from our side.
-    """
-    return [_project_for_sort(t) for t in things.inbox(include_items=True, **_kw())]
-
-
 def today() -> list[dict[str, Any]]:
     return things.today(**_kw())
 
