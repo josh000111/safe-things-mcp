@@ -18,9 +18,21 @@ from .tools import confirm, meta, propose, read, undo, write
 # uses the old cooking examples (carbonara/cake) — sync the RULES from it, never
 # the example nouns. See docs/sort-issues-tracker.md issue B1.
 AGENT_INSTRUCTIONS = """\
-things-mcp controls Things 3 on macOS. Reads are safe. All writes go through \
-propose_* -> confirm_action, and every mutation is logged so undo()/undo_group() \
-can reverse it.
+things-mcp controls Things 3 on macOS. Reads are safe. Every mutation is logged \
+so undo()/undo_group() can reverse it.
+
+CHOOSING A WRITE TOOL. Two write paths exist:
+- Direct tools (add_inbox_todo, add_today_todo, add_anytime_todo, add_someday_todo, \
+complete_todo): execute immediately with no confirm step. Use these when (a) the \
+user explicitly names the task and its destination ("add Buy milk to inbox"), (b) \
+the user asks to add something "without confirmation" or "without prompting me", or \
+(c) the destination is one of the four fixed lists and no judgment call is involved. \
+These tools still log to undo_log, so they are always reversible.
+- propose_* tools: stage an action for review before execution. Use these when \
+targeting a project or area UUID, when placement requires judgment, or for any \
+destructive or bulk operation. All propose_* calls require confirm_action() to \
+execute, except when THINGS_MCP_AUTO_CONFIRM=1 (destructive and bulk ops always \
+require explicit confirm regardless).
 
 The rules below apply ONLY when you are making a SEMANTIC JUDGMENT about the \
 user's tasks: sorting or organising an inbox, categorising, applying tags, \

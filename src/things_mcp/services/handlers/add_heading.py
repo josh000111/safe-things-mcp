@@ -64,6 +64,7 @@ async def execute(payload: dict) -> dict:
     project_id = payload["project_id"]
     name = payload["name"]
     after_todo_id = payload.get("after_todo_id")
+    group_id = payload.get("group_id")
 
     proj = things_repo.project(project_id)
     if proj is None:
@@ -79,6 +80,7 @@ async def execute(payload: dict) -> dict:
         target_uuid=None,
         before_state=None,
         after_state=None,
+        group_id=group_id,
     )
 
     # Use time-based created_after with 2s slack for sub-second skew.

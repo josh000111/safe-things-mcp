@@ -35,11 +35,14 @@ ALLOW_APPLESCRIPT = os.environ.get("THINGS_MCP_ALLOW_APPLESCRIPT", "").strip().l
 # chunks (chunk C delete, chunk E bulk_*) are pre-listed so the gate is in
 # place when those handlers ship.
 NEVER_BYPASS_KINDS: frozenset[str] = frozenset({
-    "delete_todo",      # AppleScript delete → Things Trash
-    "delete_heading",
-    "delete_project",   # AppleScript delete → Things Trash
+    # Single-item deletes (delete_todo, delete_heading) intentionally omitted:
+    # they respect AUTO_CONFIRM=1 because deletes go to Trash (reversible via
+    # undo()) and the user has expressed clear intent when naming the item.
+    "delete_project",      # AppleScript delete → Trash, cascades to all tasks — always confirm
     "bulk_cancel",
     "bulk_complete",
+    "bulk_delete_todo",    # multi-target AppleScript delete → Trash
+    "bulk_delete_heading", # multi-target soft-delete
     "bulk_move",
     "bulk_update",
     "replace_checklist",  # destructive overwrite of entire checklist

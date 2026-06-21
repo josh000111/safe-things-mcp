@@ -27,6 +27,7 @@ async def execute(payload: dict) -> dict:
     todo_ids = list(payload.get("todo_ids") or [])
     if not todo_ids:
         raise ValueError("bulk_cancel requires a non-empty todo_ids list.")
+    group_id = payload.get("group_id")
 
     auth_token = config.THINGS_AUTH_TOKEN
     if not auth_token:
@@ -61,6 +62,7 @@ async def execute(payload: dict) -> dict:
         target_uuid=None,
         before_state={"items": items, "count": len(items)},
         after_state=None,
+        group_id=group_id,
     )
 
     for item in items:

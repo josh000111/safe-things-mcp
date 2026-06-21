@@ -21,7 +21,7 @@ Most Things MCP servers offer basic reads and direct URL-scheme writes. This one
 | Reorder to-dos | yes | no | no | no |
 | Delete to Trash (not just cancel) | yes | yes | partial | no |
 | Signed binary build (persistent permission grant) | yes | no | no | no |
-| Total tools | 52 | ~25 | 37 | ~10 |
+| Total tools | 62 | ~25 | 37 | ~10 |
 
 **Propose/confirm** -- every write previews what will change before anything is executed. You see what the agent is about to do and approve or reject it. Destructive and bulk operations can never be auto-confirmed.
 
@@ -294,10 +294,18 @@ Each `propose_*` call returns a preview for you to approve before anything is wr
 
 | Tool | What it does |
 |---|---|
+| `propose_bulk_add_todo` | Add multiple to-dos to a single destination in one operation |
 | `propose_bulk_complete` | Mark multiple to-dos done in one operation |
 | `propose_bulk_cancel` | Cancel multiple to-dos in one operation |
+| `propose_bulk_delete_todo` † | Delete multiple to-dos, moves all to Things Trash |
 | `propose_bulk_move` | Move multiple to-dos to a different list or project |
 | `propose_bulk_update` | Edit fields across multiple to-dos at once |
+
+**Bulk heading operations** (always require explicit confirm)
+
+| Tool | What it does |
+|---|---|
+| `propose_bulk_delete_heading` | Soft-delete multiple dummy headings from a project in one operation |
 
 **AI tagging operations** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1` -- see [AI Tagging](#ai-tagging))
 
@@ -350,11 +358,14 @@ Pending actions expire after 5 minutes.
 
 **Skipping the confirm round-trip:** set `THINGS_MCP_AUTO_CONFIRM=1` in the env block. `propose_*` tools will execute immediately and return a summary instead of a preview. The following operations always require an explicit `confirm_action()` regardless of this flag:
 
-- `propose_delete_todo` and `propose_delete_project`
-- `propose_delete_heading`
+- `propose_delete_project` — cascades to all tasks inside the project
 - `propose_bulk_complete`, `propose_bulk_cancel`, `propose_bulk_move`, `propose_bulk_update`
+- `propose_bulk_delete_todo`, `propose_bulk_delete_heading` — multi-target deletes
 - `propose_replace_checklist`
 - `propose_delete_ai_tag`
+- `propose_move_under_ai_heading`
+
+`propose_delete_todo` and `propose_delete_heading` **do** respect `AUTO_CONFIRM=1` — single-item deletes go to Things Trash and are reversible via `undo()`, so explicit confirmation is not forced when the user has already named the item. `propose_bulk_add_todo` also respects `AUTO_CONFIRM=1` (additive, low risk).
 
 ---
 

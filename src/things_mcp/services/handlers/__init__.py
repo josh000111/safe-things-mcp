@@ -28,8 +28,11 @@ from . import (
     add_todo,
     append_checklist,
     apply_ai_tags,
+    bulk_add_todo,
     bulk_complete,
     bulk_delete,
+    bulk_delete_heading,
+    bulk_delete_todo,
     bulk_move,
     bulk_update,
     cancel_project,
@@ -77,6 +80,9 @@ REGISTRY: dict[str, Handler] = {
     update_project.KIND: update_project,  # type: ignore[dict-item]
     bulk_complete.KIND: bulk_complete,  # type: ignore[dict-item]
     bulk_delete.KIND: bulk_delete,  # type: ignore[dict-item]
+    bulk_delete_todo.KIND: bulk_delete_todo,  # type: ignore[dict-item]
+    bulk_delete_heading.KIND: bulk_delete_heading,  # type: ignore[dict-item]
+    bulk_add_todo.KIND: bulk_add_todo,  # type: ignore[dict-item]
     bulk_move.KIND: bulk_move,  # type: ignore[dict-item]
     bulk_update.KIND: bulk_update,  # type: ignore[dict-item]
     add_heading.KIND: add_heading,  # type: ignore[dict-item]

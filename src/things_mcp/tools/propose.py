@@ -23,12 +23,15 @@ from mcp.server.fastmcp import FastMCP
 
 from .. import config
 from ..models import (
+    BulkAddTodoItem,
     ProposeAddHeadingInput,
     ProposeAddProjectInput,
     ProposeAddTodoInput,
     ProposeApplyAiTagsInput,
+    ProposeBulkAddTodoInput,
     ProposeBulkCancelInput,
     ProposeBulkCompleteInput,
+    ProposeBulkDeleteHeadingInput,
     ProposeBulkDeleteInput,
     ProposeBulkMoveInput,
     ProposeBulkUpdateInput,
@@ -177,8 +180,11 @@ async def propose_delete_todo(todo_id: str) -> dict:
 
     Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 
-    **Never auto-confirmed.** Even with ``THINGS_MCP_AUTO_CONFIRM=1`` the
-    user must call ``confirm_action`` explicitly.
+    Respects ``THINGS_MCP_AUTO_CONFIRM=1`` — single-item deletes go to
+    Trash (reversible via ``undo()``), so confirmation is not forced
+    when the user has explicitly named the item. Use
+    ``propose_bulk_delete_todo`` for multi-target deletes, which always
+    require explicit confirmation.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
@@ -305,13 +311,16 @@ async def propose_bulk_complete(todo_ids: list[str]) -> dict:
     )
 
 
-async def propose_bulk_cancel(todo_ids: list[str]) -> dict:
+async def propose_bulk_cancel(todo_ids: list[str], group_id: str | None = None) -> dict:
     """Propose canceling N to-dos in one airlocked op.
 
     Each task gets marked canceled. Use ``undo()`` to restore the whole
     batch. **Never auto-confirmed.**
+
+    ``group_id`` — optional label written to the undo_log so that
+    ``undo_group(group_id)`` can reverse multiple operations atomically.
     """
-    payload_model = ProposeBulkCancelInput(todo_ids=todo_ids)
+    payload_model = ProposeBulkCancelInput(todo_ids=todo_ids, group_id=group_id)
     payload = payload_model.model_dump()
     preview = handlers.bulk_delete.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -375,12 +384,16 @@ async def propose_bulk_update(
     notes: str | None = None,
     deadline: str | None = None,
     tags: list[str] | None = None,
+    group_id: str | None = None,
 ) -> dict:
     """Propose applying one set of field changes to N to-dos.
 
     Convention matches :func:`propose_update_todo`: ``None`` means "don't
     change", ``""`` clears a string field, ``[]`` clears tags. At least
     one updatable field required. **Never auto-confirmed.**
+
+    ``group_id`` — optional label written to the undo_log so that
+    ``undo_group(group_id)`` can reverse multiple operations atomically.
     """
     url_scheme.validate_tags(tags)
     payload_model = ProposeBulkUpdateInput(
@@ -389,11 +402,97 @@ async def propose_bulk_update(
         notes=notes,
         deadline=deadline,
         tags=tags,
+        group_id=group_id,
     )
     payload = payload_model.model_dump(exclude_none=True)
     preview = handlers.bulk_update.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_update.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_bulk_delete_todo(
+    todo_ids: list[str],
+    group_id: str | None = None,
+) -> dict:
+    """Propose deleting N to-dos in one airlocked op (moves all to Things Trash).
+
+    Bulk version of ``propose_delete_todo``. Validates every id before any
+    mutation — if one is missing or already in Trash, the whole batch aborts.
+    Undo restores each task from Trash to its original list or project.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+
+    **Never auto-confirmed** — explicit ``confirm_action`` always required.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_bulk_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Set the environment variable and restart the MCP server."
+        )
+    payload_model = ProposeBulkDeleteInput(todo_ids=todo_ids, group_id=group_id)
+    payload = payload_model.model_dump()
+    preview = handlers.bulk_delete_todo.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.bulk_delete_todo.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_bulk_delete_heading(
+    project_id: str,
+    heading_ids_or_names: list[str],
+    group_id: str | None = None,
+) -> dict:
+    """Propose soft-deleting N dummy headings from a project in one airlocked op.
+
+    Bulk version of ``propose_delete_heading``. Validates every heading
+    before any mutation — all must be dummy headings (``__NAME__`` format)
+    and not already deleted. Undo restores each heading to incomplete.
+
+    Requires ``THINGS_AUTH_TOKEN``.
+
+    **Never auto-confirmed** — explicit ``confirm_action`` always required.
+    """
+    payload_model = ProposeBulkDeleteHeadingInput(
+        project_id=project_id,
+        heading_ids_or_names=heading_ids_or_names,
+        group_id=group_id,
+    )
+    payload = payload_model.model_dump()
+    preview = handlers.bulk_delete_heading.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.bulk_delete_heading.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_bulk_add_todo(
+    list_id: str,
+    items: list[dict],
+    group_id: str | None = None,
+) -> dict:
+    """Propose adding N to-dos to a single destination in one airlocked op.
+
+    Each item in ``items`` is a dict with ``title`` (required) and optional
+    ``notes``, ``when``, ``deadline``, ``tags``, ``checklist``. All items
+    land in the same ``list_id`` — use ``propose_add_todo`` for items going
+    to different lists.
+
+    ``list_id`` accepts the same values as ``propose_add_todo``: ``inbox``,
+    ``today``, ``anytime``, ``someday``, or a project/area UUID.
+
+    Undo soft-cancels every added task (completed+canceled). Requires
+    ``THINGS_AUTH_TOKEN`` for undo.
+    """
+    parsed_items = [BulkAddTodoItem(**it) for it in items]
+    payload_model = ProposeBulkAddTodoInput(
+        list_id=list_id,
+        items=parsed_items,
+        group_id=group_id,
+    )
+    payload = payload_model.model_dump()
+    preview = handlers.bulk_add_todo.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.bulk_add_todo.KIND, payload=payload, preview=preview
     )
 
 
@@ -455,6 +554,7 @@ async def propose_add_heading(
     project_id: str,
     name: str,
     after_todo_id: str | None = None,
+    group_id: str | None = None,
 ) -> dict:
     """Propose adding a dummy heading to an existing project.
 
@@ -467,9 +567,12 @@ async def propose_add_heading(
 
     Undo cancels the dummy task (moves to Logbook). Requires ``THINGS_AUTH_TOKEN`` only
     for undo.
+
+    ``group_id`` — optional label written to the undo_log so that
+    ``undo_group(group_id)`` can reverse multiple operations atomically.
     """
     payload_model = ProposeAddHeadingInput(
-        project_id=project_id, name=name, after_todo_id=after_todo_id
+        project_id=project_id, name=name, after_todo_id=after_todo_id, group_id=group_id
     )
     payload = payload_model.model_dump()
     preview = handlers.add_heading.make_preview(payload)
@@ -508,6 +611,7 @@ async def propose_update_heading(
 async def propose_delete_heading(
     project_id: str,
     heading_id_or_name: str,
+    group_id: str | None = None,
 ) -> dict:
     """Propose soft-deleting a dummy heading task inside a project.
 
@@ -519,10 +623,14 @@ async def propose_delete_heading(
     requires AppleScript (step 5).
 
     **Never auto-confirmed.** Requires ``THINGS_AUTH_TOKEN``.
+
+    ``group_id`` — optional label written to the undo_log so that
+    ``undo_group(group_id)`` can reverse multiple operations atomically.
     """
     payload_model = ProposeDeleteHeadingInput(
         project_id=project_id,
         heading_id_or_name=heading_id_or_name,
+        group_id=group_id,
     )
     payload = payload_model.model_dump()
     preview = handlers.delete_heading.make_preview(payload)
@@ -950,6 +1058,9 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_update_project)
     mcp.tool()(propose_bulk_complete)
     mcp.tool()(propose_bulk_cancel)
+    mcp.tool()(propose_bulk_delete_todo)
+    mcp.tool()(propose_bulk_delete_heading)
+    mcp.tool()(propose_bulk_add_todo)
     mcp.tool()(propose_bulk_move)
     mcp.tool()(propose_bulk_update)
     mcp.tool()(propose_add_heading)

@@ -228,8 +228,53 @@ class ProposeBulkCompleteInput(BaseModel):
 
 
 class ProposeBulkDeleteInput(BaseModel):
-    """V2 — propose soft-deleting N to-dos in one airlocked op."""
+    """V2 — propose deleting N to-dos (move to Things Trash) in one airlocked op.
+
+    Always in :data:`config.NEVER_BYPASS_KINDS` — explicit confirm required.
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
     todo_ids: list[str] = Field(..., min_length=1)
+    group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
+
+
+class BulkAddTodoItem(BaseModel):
+    """A single to-do spec within a ``propose_bulk_add_todo`` batch."""
+    title: str = Field(..., min_length=1, max_length=500)
+    notes: str | None = None
+    when: str | None = Field(
+        default=None,
+        description=(
+            "Things 'when' value: today, tomorrow, evening, anytime, someday, "
+            "or an ISO date / datetime (YYYY-MM-DD or YYYY-MM-DD@HH:MM)."
+        ),
+    )
+    deadline: str | None = Field(default=None, description="ISO date YYYY-MM-DD.")
+    tags: list[str] | None = None
+    checklist: list[str] | None = None
+
+
+class ProposeBulkAddTodoInput(BaseModel):
+    """V2 — propose adding N to-dos to a single destination in one airlocked op.
+
+    ``list_id`` accepts the same values as :class:`ProposeAddTodoInput`:
+    a reserved keyword (``inbox``, ``today``, ``anytime``, ``someday``) or
+    a project/area UUID. All items land in the same destination; use
+    ``propose_add_todo`` for items going to different lists.
+    """
+    list_id: str = Field(default="inbox", min_length=1)
+    items: list[BulkAddTodoItem] = Field(..., min_length=1)
+    group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
+
+
+class ProposeBulkDeleteHeadingInput(BaseModel):
+    """V2 — propose soft-deleting N dummy headings in one airlocked op.
+
+    Always in :data:`config.NEVER_BYPASS_KINDS` — explicit confirm required.
+    Requires ``THINGS_AUTH_TOKEN``.
+    """
+    project_id: str = Field(..., min_length=1)
+    heading_ids_or_names: list[str] = Field(..., min_length=1, description="UUIDs or names of the dummy heading tasks to delete")
+    group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
 
 
 class ProposeBulkMoveInput(BaseModel):
@@ -257,6 +302,7 @@ class ProposeBulkUpdateInput(BaseModel):
         default=None,
         description="List of tag names; [] clears all tags.",
     )
+    group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
 
     @model_validator(mode="after")
     def _require_at_least_one_field(self) -> "ProposeBulkUpdateInput":
@@ -272,6 +318,7 @@ class ProposeAddHeadingInput(BaseModel):
     project_id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1, max_length=200, description="Heading name (will be stored as __NAME__ dummy task title)")
     after_todo_id: str | None = Field(default=None, description="Hint for position (not honored by URL-scheme layer; acknowledged in preview)")
+    group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
 
 
 class ProposeUpdateHeadingInput(BaseModel):
@@ -283,6 +330,7 @@ class ProposeUpdateHeadingInput(BaseModel):
 class ProposeDeleteHeadingInput(BaseModel):
     project_id: str = Field(..., min_length=1)
     heading_id_or_name: str = Field(..., min_length=1, description="UUID of the dummy heading task, or its name")
+    group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
 
 
 class ProposeCancelTodoInput(BaseModel):
@@ -293,6 +341,7 @@ class ProposeCancelTodoInput(BaseModel):
 class ProposeBulkCancelInput(BaseModel):
     """V2 — propose canceling N to-dos in one airlocked op."""
     todo_ids: list[str] = Field(..., min_length=1)
+    group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
 
 
 class ProposeCancelProjectInput(BaseModel):

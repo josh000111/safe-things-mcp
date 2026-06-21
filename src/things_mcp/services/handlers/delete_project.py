@@ -1,9 +1,13 @@
 """``delete_project`` handler — move a project to Things Trash via AppleScript.
 
 Uses AppleScript ``delete`` which moves the project to Things Trash.
-Undo uses AppleScript ``move project id X to list "Anytime"`` (safe
+Undo uses AppleScript ``move to do id X to list "Anytime"`` (safe
 fallback; original area restore via AppleScript is not supported by
 Things' SDEF).
+
+``to do id`` is used instead of ``project id`` because the latter only
+resolves active/incomplete projects — cancelled projects in the Logbook
+are unreachable via ``project id``.
 
 This kind is in ``NEVER_BYPASS_KINDS`` — explicit confirm required.
 
@@ -36,7 +40,7 @@ async def execute(payload: dict) -> dict:
     2. Confirm project exists and is not already in Trash.
     3. Snapshot the full row (needed for undo).
     4. Write undo_log row BEFORE the AppleScript call (V2 acceptance gate).
-    5. Run: tell application "Things3" to delete (project id "X").
+    5. Run: tell application "Things3" to delete (to do id "X").
     6. Return result with undo_id.
     """
     from ...config import ALLOW_APPLESCRIPT
@@ -74,7 +78,7 @@ async def execute(payload: dict) -> dict:
     )
 
     safe_id = applescript.escape(project_id)
-    script = f'tell application "Things3" to delete (project id "{safe_id}")'
+    script = f'tell application "Things3" to delete (to do id "{safe_id}")'
     await applescript.run_script(script)
 
     undo_log.attach_target(entry_id, target_uuid=project_id, after_state={"status": "trashed"})
@@ -116,7 +120,7 @@ async def undo(undo_entry: dict) -> dict:
     safe_id = applescript.escape(target_uuid)
     script = (
         f'tell application "Things3"\n'
-        f'    move (project id "{safe_id}") to list "Anytime"\n'
+        f'    move (to do id "{safe_id}") to list "Anytime"\n'
         f'    return ""\n'
         f'end tell'
     )

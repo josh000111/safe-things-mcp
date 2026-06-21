@@ -47,6 +47,7 @@ async def execute(payload: dict) -> dict:
     """
     project_id = payload["project_id"]
     heading_id_or_name = payload["heading_id_or_name"]
+    group_id = payload.get("group_id")
 
     auth_token = config.THINGS_AUTH_TOKEN
     if not auth_token:
@@ -80,6 +81,7 @@ async def execute(payload: dict) -> dict:
         target_uuid=heading_uuid,
         before_state={"full": before, "status": before.get("status"), "title": before.get("title")},
         after_state=None,
+        group_id=group_id,
     )
 
     url = url_scheme.build_update_url(

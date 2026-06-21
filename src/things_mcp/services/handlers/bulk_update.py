@@ -41,6 +41,7 @@ async def execute(payload: dict) -> dict:
     todo_ids = list(payload.get("todo_ids") or [])
     if not todo_ids:
         raise ValueError("bulk_update requires a non-empty todo_ids list.")
+    group_id = payload.get("group_id")
 
     fields = {k: payload[k] for k in _UPDATABLE_FIELDS if payload.get(k) is not None}
     if not fields:
@@ -82,6 +83,7 @@ async def execute(payload: dict) -> dict:
             "applied_fields": fields,
         },
         after_state=None,
+        group_id=group_id,
     )
 
     for item in items:

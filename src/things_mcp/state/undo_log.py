@@ -67,6 +67,21 @@ def attach_target(
     return cur.rowcount > 0
 
 
+def update_after_state(entry_id: str, after_state: dict[str, Any]) -> bool:
+    """Replace after_state on an existing row.
+
+    Used by bulk-add mutations to patch in resolved UUIDs after all URL
+    launches complete (the row is written before any launch per the V2
+    acceptance gate, so after_state starts NULL).
+    """
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE undo_log SET after_state_json = ? WHERE id = ?",
+            (json.dumps(after_state), entry_id),
+        )
+    return cur.rowcount > 0
+
+
 def update_before_state(entry_id: str, before_state: dict[str, Any]) -> bool:
     """Replace before_state on an existing row.
 
