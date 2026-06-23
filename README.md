@@ -43,7 +43,7 @@ Most Things MCP servers offer basic reads and direct URL-scheme writes. This one
 ## Install
 
 ```bash
-git clone <this repo> things-mcp
+git clone https://github.com/josh000111/things-mcp things-mcp
 cd things-mcp
 uv venv --python /opt/homebrew/bin/python3
 uv sync
@@ -77,6 +77,7 @@ Read tools work immediately with no configuration. The steps below are only need
 3. Add it to your MCP client's env block as `THINGS_AUTH_TOKEN`.
 4. For delete, reorder, and AI tagging operations, also add `THINGS_MCP_ALLOW_APPLESCRIPT=1` to the same env block.
 5. Restart the client.
+6. Pre-create the AI flag tags (once, idempotent): ask the agent to call `ensure_ai_tags()`. This creates the `AI` parent tag and the five abstain flags (`*Unclear*`, `*Ambiguous Home*`, etc.) if any are missing.
 
 Verify: ask the agent *"call health()"* and confirm `url_scheme_auth_token_set: true`.
 
@@ -369,6 +370,27 @@ Pending actions expire after 5 minutes.
 
 ---
 
+## Reducing permission prompts
+
+Two **separate** prompt systems sit in front of the write tools. They are unrelated and have different fixes — most friction comes from not realising they are distinct:
+
+**1. Your MCP client's per-tool approval** — *"Allow Claude to use Propose add project?"*. This comes from the client (Claude Desktop, Claude Code, Cursor…), not from things-mcp. Every MCP tool is gated until you approve it.
+
+- **Claude Code / Cursor / VS Code** — allow-list the whole server once. In Claude Code, add to `.claude/settings.json`:
+  ```json
+  { "permissions": { "allow": ["mcp__things__*"] } }
+  ```
+  (replace `things` with the server name in your config). Or enable accept-all / auto-accept mode for the session.
+- **Claude Desktop** — click **Allow always** the first time each tool runs (one approval per tool, then it stops). Desktop has no wildcard allow-list today, so `AUTO_CONFIRM` below matters more here because it reduces the *number* of distinct tools the agent has to call.
+
+**2. things-mcp's own confirm step** — the `propose_*` → `confirm_action` round-trip. Set `THINGS_MCP_AUTO_CONFIRM=1` so `propose_*` tools execute immediately (see [Propose/confirm flow](#proposeconfirm-flow)). The genuinely destructive bulk/delete operations listed above still require an explicit `confirm_action()` regardless — that is the intended safety floor.
+
+**For the smoothest experience, combine both:** allow-list the server (or turn on auto-accept) **and** set `THINGS_MCP_AUTO_CONFIRM=1`. You then run friction-free for everyday adds/updates/moves while keeping a hard confirmation on the dangerous bulk operations.
+
+> The recurring **"python … would like to access data from other apps"** dialog is a *third*, OS-level prompt — see [macOS permission prompts](#first-run-setup) above. Neither auto-accept nor `AUTO_CONFIRM` affects it; the fix is the signed bundle (Option B) or Full Disk Access.
+
+---
+
 ## AI Tagging
 
 things-mcp includes a tagging system designed for AI agents sorting large task lists. The core principle is **abstain-and-flag**: when the agent's confidence falls below roughly 90%, it applies a persistent flag tag rather than guessing at a destination. One ambiguous task never blocks the rest of the batch.
@@ -455,7 +477,7 @@ Default bias: reuse existing lists. Avoid creating clutter.
 
 ## Undo
 
-Every confirmed write -- direct writes and confirmed `propose_*` actions alike -- records its inverse state to `undo_log` before executing the mutation. If something goes wrong or you change your mind, undo is always available.
+Every confirmed write -- direct writes and confirmed `propose_*` actions alike -- records its inverse state to `undo_log` before executing the mutation. If something goes wrong or you change your mind, undo is always available. You can also just say **"undo that"** — the agent knows what to call.
 
 ```
 # Reverse the most recent action
@@ -471,6 +493,20 @@ undo_group(group_id="sort-xyz")
 `undo_group` is designed for the AI sorting workflow: a full sort produces three undo_log entries (`apply_ai_tags`, `bulk_move`, `cleanup_ai_tags`) that share a `group_id`. Passing that ID to `undo_group` reverses all three in the correct order, regardless of other actions that may have happened since.
 
 **Retention:** by default, undo entries are kept for 7 days or up to 200 rows, whichever limit is hit first. Both limits are configurable via environment variables.
+
+---
+
+## Routines / scheduled workflows
+
+things-mcp is a stdio MCP server — it can't self-schedule. Routines are **user-run prompt recipes**: you send a prompt, the agent reads and sorts your tasks, you confirm, done. For unattended scheduling use OS-level tools (launchd, cron) or Claude Code's `/schedule` command to fire the same prompts automatically.
+
+**Example prompts to run as routines:**
+
+- **Process Inbox** — *"Sort everything in my Inbox: route tasks to the right projects or areas, flag anything ambiguous, and show me a summary before moving anything."*
+- **Clear Today** — *"Review my Today list: complete anything that's done, move anything I can't realistically finish today back to Anytime, and flag anything that needs rescheduling."*
+- **Organise Projects** — *"Look at all my active projects. Identify any that have no open tasks (stalled) or that have tasks that belong somewhere else, and propose moves."*
+
+Tip: after any routine finishes, you can undo the entire run with a single `undo_group(group_id)` call — the agent reports the `group_id` at the end of every sort.
 
 ---
 

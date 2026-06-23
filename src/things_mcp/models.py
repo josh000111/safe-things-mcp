@@ -112,12 +112,13 @@ class ProposeMoveTodoInput(BaseModel):
 
     ``target`` accepts:
 
+    * ``"inbox"`` — move to Inbox (requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``).
     * ``"today"`` / ``"anytime"`` / ``"someday"`` — scheduling move
       (preserves project/area membership).
     * A 22-char Things UUID — project/area membership change.
     * Other strings are rejected with an actionable hint.
 
-    Specific-date moves and move-to-Inbox are deferred to a follow-up.
+    Specific-date moves are deferred to a follow-up.
     """
     todo_id: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
@@ -145,11 +146,31 @@ class ProposeAddProjectInput(BaseModel):
     * ``headings`` non-empty → ``things:///json?data=<JSON>`` — the only
       mechanism for creating native section headings at project birth.
 
-    ``area_id`` puts the project under an existing area UUID. ``when`` /
-    ``deadline`` follow the same conventions as the to-do tools.
+    ``area`` (name) auto-creates the area if it doesn't exist.
+    ``area_id`` puts the project under an existing area UUID.
+    Pass at most one — they are mutually exclusive.
+    ``when`` / ``deadline`` follow the same conventions as the to-do tools.
     """
     title: str = Field(..., min_length=1, max_length=500)
+    area: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Area NAME — auto-created by Things if it doesn't exist. "
+            "Mutually exclusive with area_id."
+        ),
+    )
     area_id: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _area_mutual_exclusion(self) -> "ProposeAddProjectInput":
+        if self.area is not None and self.area_id is not None:
+            raise ValueError(
+                "area and area_id are mutually exclusive: use area='<Name>' "
+                "to auto-create an area by name, or area_id='<UUID>' to "
+                "reference an existing area by UUID — not both."
+            )
+        return self
     when: str | None = Field(
         default=None,
         description=(
@@ -260,10 +281,17 @@ class ProposeBulkAddTodoInput(BaseModel):
     a reserved keyword (``inbox``, ``today``, ``anytime``, ``someday``) or
     a project/area UUID. All items land in the same destination; use
     ``propose_add_todo`` for items going to different lists.
+
+    ``preserve_order`` (default True) ensures the final visible order in Things
+    matches the caller-supplied ``items`` order. For top-inserting targets
+    (``inbox``, ``today``), the add loop is reversed internally so the first
+    item ends up on top. For project/area targets that insert at the bottom,
+    the original order is used unchanged.
     """
     list_id: str = Field(default="inbox", min_length=1)
     items: list[BulkAddTodoItem] = Field(..., min_length=1)
     group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
+    preserve_order: bool = Field(default=True, description="When True (default), reverses the add loop for top-inserting targets (inbox, today) so the final visible order matches the caller's intended order.")
 
 
 class ProposeBulkDeleteHeadingInput(BaseModel):
@@ -370,6 +398,32 @@ class ProposeCreateAiTagInput(BaseModel):
             raise ValueError(
                 f"AI tag name {self.name!r} must be asterisk-wrapped: e.g. '*Do Taxes*'. "
                 "The asterisks are mandatory structural markers."
+            )
+        return self
+
+
+class ProposeCreateTagInput(BaseModel):
+    """V2 — propose creating a plain user-named tag.
+
+    The name must NOT be asterisk-wrapped (e.g. ``*Health*`` is rejected).
+    Asterisk-wrapped names are for AI-invented tags — use
+    ``propose_create_ai_tag`` for those. Plain tags are for user-named
+    concepts like "admin" or "Health".
+
+    ``parent`` is optional: omit for a top-level tag, supply to nest it
+    under an existing (or auto-created) parent tag.
+    """
+    name: str = Field(..., min_length=1)
+    parent: str | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _reject_asterisk_wrapper(self) -> "ProposeCreateTagInput":
+        if self.name.startswith("*") and self.name.endswith("*") and len(self.name) > 2:
+            raise ValueError(
+                f"Tag name {self.name!r} looks like an AI-invented flag tag "
+                "(asterisk-wrapped). Use propose_create_ai_tag for AI-invented "
+                "tags. propose_create_tag is for user-named tags like 'admin' "
+                "or 'Health'."
             )
         return self
 

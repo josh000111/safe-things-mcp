@@ -25,7 +25,7 @@ from typing import Any
 from ... import config
 from .. import applescript, things_repo, url_scheme
 from ...state import undo_log
-from .dummy_heading import AI_NEWLY_ADDED_HEADING
+from .dummy_heading import AI_NEWLY_ADDED_HEADING, AI_SEPARATOR_RULE
 from .move_todo import _inverse_project
 
 KIND = "move_under_ai_heading"
@@ -104,19 +104,25 @@ async def execute(payload: dict) -> dict:
             "items": items,
             "marker_uuid": None,
             "marker_created": None,
+            "separator_uuid": None,
+            "separator_created": None,
         },
         after_state=None,
         group_id=group_id,
     )
 
-    # Find-or-create the marker (idempotent).
-    marker_uuid, marker_created = await _find_or_create_marker(project_id, auth_token)
+    # Find-or-create the separator rule and marker (idempotent).
+    separator_uuid, separator_created, marker_uuid, marker_created = (
+        await _find_or_create_separator_and_marker(project_id, auth_token)
+    )
     undo_log.update_before_state(entry_id, {
         "project_id": project_id,
         "prior_order": prior_order,
         "items": items,
         "marker_uuid": marker_uuid,
         "marker_created": marker_created,
+        "separator_uuid": separator_uuid,
+        "separator_created": separator_created,
     })
 
     # Move todos into the project.
@@ -132,15 +138,17 @@ async def execute(payload: dict) -> dict:
     for item in items:
         await _poll_until_in_project(item["target_uuid"], project_id)
 
-    # Reorder: pre-existing (sans marker if pre-existing) → marker → new todos.
+    # Reorder: pre-existing (sans separator & marker) → separator → marker → new todos.
     moved_uuids = [item["target_uuid"] for item in items]
-    new_order = _build_new_order(prior_order, marker_uuid, moved_uuids)
+    new_order = _build_new_order(prior_order, separator_uuid, marker_uuid, moved_uuids)
     await _reorder_project(project_id, new_order)
 
     return {
         "action_kind": KIND,
         "undo_id": entry_id,
         "project_id": project_id,
+        "separator_uuid": separator_uuid,
+        "separator_created": separator_created,
         "marker_uuid": marker_uuid,
         "marker_created": marker_created,
         "moved_count": len(items),
@@ -155,6 +163,8 @@ async def undo(undo_entry: dict) -> dict:
     items: list[dict] = before.get("items") or []
     marker_uuid: str | None = before.get("marker_uuid")
     marker_created: bool | None = before.get("marker_created")
+    separator_uuid: str | None = before.get("separator_uuid")
+    separator_created: bool | None = before.get("separator_created")
 
     if not project_id:
         raise RuntimeError(
@@ -209,6 +219,16 @@ async def undo(undo_entry: dict) -> dict:
         )
         await url_scheme.launch(url)
 
+    # Step 4: Cancel the separator only if this action created it.
+    if separator_created and separator_uuid:
+        url = url_scheme.build_update_url(
+            id=separator_uuid,
+            auth_token=auth_token,
+            completed=True,
+            canceled=True,
+        )
+        await url_scheme.launch(url)
+
     undo_log.delete(undo_entry["id"])
 
     return {
@@ -217,6 +237,7 @@ async def undo(undo_entry: dict) -> dict:
         "project_id": project_id,
         "restored_count": len(items),
         "marker_cancelled": bool(marker_created and marker_uuid),
+        "separator_cancelled": bool(separator_created and separator_uuid),
     }
 
 
@@ -225,44 +246,83 @@ async def undo(undo_entry: dict) -> dict:
 
 def _build_new_order(
     prior_order: list[str],
+    separator_uuid: str,
     marker_uuid: str,
     moved_uuids: list[str],
 ) -> list[str]:
     """Build the final ordered UUID list for the reorder command.
 
-    If the marker was pre-existing (already in prior_order):
-        [todos before marker] + [marker] + [todos after marker] + [moved_uuids]
-    If the marker is new:
-        [prior_order] + [marker] + [moved_uuids]
+    Final order: before(existing, excluding separator & marker)
+                 + [separator_uuid] + [marker_uuid]
+                 + after(prior AI batches, excluding separator & marker)
+                 + moved_uuids (new tasks)
 
-    The "todos after marker" are tasks from previous batches; new tasks always
-    append after them.
+    Idempotent: if the separator and/or marker already exist in prior_order,
+    they are reused (not duplicated).
     """
-    if marker_uuid in prior_order:
-        idx = prior_order.index(marker_uuid)
-        before = prior_order[:idx]
-        after = prior_order[idx + 1:]
-        return before + [marker_uuid] + after + moved_uuids
-    return prior_order + [marker_uuid] + moved_uuids
+    structural = {separator_uuid, marker_uuid}
+
+    # Find the leftmost structural element to determine the split point.
+    split_idx = None
+    for i, u in enumerate(prior_order):
+        if u in structural:
+            split_idx = i
+            break
+
+    if split_idx is not None:
+        # Strip any structural UUIDs that appear in the prefix/suffix.
+        before = [u for u in prior_order[:split_idx] if u not in structural]
+        after = [u for u in prior_order[split_idx:] if u not in structural]
+        return before + [separator_uuid, marker_uuid] + after + moved_uuids
+
+    # Neither was present: append separator + marker + moved after all existing tasks.
+    clean_prior = [u for u in prior_order if u not in structural]
+    return clean_prior + [separator_uuid, marker_uuid] + moved_uuids
 
 
-async def _find_or_create_marker(
+async def _find_or_create_separator_and_marker(
     project_id: str,
     auth_token: str,
-) -> tuple[str, bool]:
-    """Return (marker_uuid, was_created). Idempotent — reuses existing marker."""
+) -> tuple[str, bool, str, bool]:
+    """Return (separator_uuid, sep_created, marker_uuid, marker_created).
+
+    Idempotent — reuses existing separator and/or marker if already present.
+    Ensures the separator task exists directly above the marker task.
+    """
     proj = things_repo.project(project_id)
+    existing_marker: str | None = None
+    existing_separator: str | None = None
+
     if proj is not None:
         for item in (proj.get("items") or []):
-            if item.get("type") == "to-do" and item.get("title") == AI_NEWLY_ADDED_HEADING:
-                return item["uuid"], False
+            if item.get("type") == "to-do":
+                if item.get("title") == AI_NEWLY_ADDED_HEADING:
+                    existing_marker = item["uuid"]
+                elif item.get("title") == AI_SEPARATOR_RULE:
+                    existing_separator = item["uuid"]
 
-    # Create the marker heading task.
-    created_after = time.strftime(_CREATED_FMT, time.localtime(time.time() - 2))
-    url = url_scheme.build_add_url_v2(title=AI_NEWLY_ADDED_HEADING, list_id=project_id)
-    await url_scheme.launch(url)
-    verified = await _poll_for_marker(created_after)
-    return verified["uuid"], True
+    marker_created = False
+    separator_created = False
+
+    if existing_marker is None:
+        # Create the marker heading task.
+        created_after = time.strftime(_CREATED_FMT, time.localtime(time.time() - 2))
+        url = url_scheme.build_add_url_v2(title=AI_NEWLY_ADDED_HEADING, list_id=project_id)
+        await url_scheme.launch(url)
+        verified = await _poll_for_marker(created_after)
+        existing_marker = verified["uuid"]
+        marker_created = True
+
+    if existing_separator is None:
+        # Create the separator task.
+        created_after = time.strftime(_CREATED_FMT, time.localtime(time.time() - 2))
+        url = url_scheme.build_add_url_v2(title=AI_SEPARATOR_RULE, list_id=project_id)
+        await url_scheme.launch(url)
+        verified = await _poll_for_separator(created_after)
+        existing_separator = verified["uuid"]
+        separator_created = True
+
+    return existing_separator, separator_created, existing_marker, marker_created
 
 
 async def _poll_for_marker(created_after: str) -> dict:
@@ -275,6 +335,21 @@ async def _poll_for_marker(created_after: str) -> dict:
             raise RuntimeError(
                 f"Timed out after {config.WRITE_POLL_TIMEOUT_SECONDS}s waiting for "
                 f"marker {AI_NEWLY_ADDED_HEADING!r} to appear in Things. "
+                "Is the Things app running with URL scheme enabled?"
+            )
+        await asyncio.sleep(config.WRITE_POLL_INTERVAL_SECONDS)
+
+
+async def _poll_for_separator(created_after: str) -> dict:
+    deadline = asyncio.get_running_loop().time() + config.WRITE_POLL_TIMEOUT_SECONDS
+    while True:
+        match = things_repo.find_recent_by_title(AI_SEPARATOR_RULE, created_after)
+        if match is not None:
+            return match
+        if asyncio.get_running_loop().time() >= deadline:
+            raise RuntimeError(
+                f"Timed out after {config.WRITE_POLL_TIMEOUT_SECONDS}s waiting for "
+                f"separator {AI_SEPARATOR_RULE!r} to appear in Things. "
                 "Is the Things app running with URL scheme enabled?"
             )
         await asyncio.sleep(config.WRITE_POLL_INTERVAL_SECONDS)

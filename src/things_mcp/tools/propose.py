@@ -39,6 +39,7 @@ from ..models import (
     ProposeCancelTodoInput,
     ProposeCleanupAiTagsInput,
     ProposeCreateAiTagInput,
+    ProposeCreateTagInput,
     ProposeDeleteAiTagInput,
     ProposeDeleteHeadingInput,
     ProposeDeleteProjectInput,
@@ -201,6 +202,7 @@ async def propose_delete_todo(todo_id: str) -> dict:
 
 async def propose_add_project(
     title: str,
+    area: str | None = None,
     area_id: str | None = None,
     when: str | None = None,
     deadline: str | None = None,
@@ -216,8 +218,14 @@ async def propose_add_project(
     native section headings at project birth. Without headings the
     unauthenticated ``add-project`` URL is used.
 
+    ``area`` (area NAME) places the project in an area, auto-creating the
+    area in Things if it doesn't exist yet. ``area_id`` places the project
+    in an existing area by UUID. Pass at most one — they are mutually
+    exclusive.
+
     Undo cancels the created project (canceled+completed → Logbook).
     Undo requires ``THINGS_AUTH_TOKEN`` even though execute does not.
+    Note: an auto-created area is NOT removed on undo.
 
     **Sort-session contract:** when a sort session is active,
     ``member_todo_ids`` MUST be provided and contain at least 3 task UUIDs
@@ -247,6 +255,7 @@ async def propose_add_project(
     url_scheme.validate_tags(tags)
     payload_model = ProposeAddProjectInput(
         title=title,
+        area=area,
         area_id=area_id,
         when=when,
         deadline=deadline,
@@ -469,6 +478,7 @@ async def propose_bulk_add_todo(
     list_id: str,
     items: list[dict],
     group_id: str | None = None,
+    preserve_order: bool = True,
 ) -> dict:
     """Propose adding N to-dos to a single destination in one airlocked op.
 
@@ -480,6 +490,15 @@ async def propose_bulk_add_todo(
     ``list_id`` accepts the same values as ``propose_add_todo``: ``inbox``,
     ``today``, ``anytime``, ``someday``, or a project/area UUID.
 
+    ``preserve_order`` (default True) ensures the final visible order in Things
+    matches the order of ``items``. The Things Inbox and Today views insert each
+    new task at the TOP of the list, so adding [A, B, C] sequentially produces
+    visible order [C, B, A]. When ``preserve_order=True`` and the target is a
+    top-inserting list (``inbox`` or ``today``), the handler reverses the add
+    sequence internally so [A, B, C] is the final visible order. For project and
+    area targets (which insert at the bottom), the original order is preserved
+    without reversal. Pass ``preserve_order=False`` to disable this behavior.
+
     Undo soft-cancels every added task (completed+canceled). Requires
     ``THINGS_AUTH_TOKEN`` for undo.
     """
@@ -488,6 +507,7 @@ async def propose_bulk_add_todo(
         list_id=list_id,
         items=parsed_items,
         group_id=group_id,
+        preserve_order=preserve_order,
     )
     payload = payload_model.model_dump()
     preview = handlers.bulk_add_todo.make_preview(payload)
@@ -674,7 +694,11 @@ async def propose_prepend_checklist_items(todo_id: str, items: list[str]) -> dic
     )
 
 
-async def propose_reorder_todos(container: str, new_order: list[str]) -> dict:
+async def propose_reorder_todos(
+    container: str,
+    new_order: list[str],
+    allow_existing_reorder: bool = False,
+) -> dict:
     """Propose reordering to-dos in a list or project.
 
     container: built-in list name ("inbox", "today", "anytime", "someday")
@@ -684,6 +708,10 @@ async def propose_reorder_todos(container: str, new_order: list[str]) -> dict:
                specified UUIDs are placed in the given relative order at
                their original sorted positions; other todos keep relative
                positions).
+    allow_existing_reorder: if False (default) and a __NEWLY ADDED BY AI__
+               marker is present, reordering tasks at or above the marker
+               is rejected to keep pre-existing tasks pinned at the top.
+               Pass True to override this guard.
 
     Requires THINGS_MCP_ALLOW_APPLESCRIPT=1.
 
@@ -719,6 +747,7 @@ async def propose_reorder_todos(container: str, new_order: list[str]) -> dict:
         "dummy_creation_plan": dummy_creation_plan,
         "original_order": current_uuids,
         "created_dummy_uuids": [],
+        "allow_existing_reorder": allow_existing_reorder,
     }
 
     preview = _reorder_todos.make_preview(payload)
@@ -827,6 +856,37 @@ async def propose_create_ai_tag(name: str, parent: str = "AI") -> dict:
     preview = handlers.create_ai_tag.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.create_ai_tag.KIND, payload=payload, preview=preview
+    )
+
+
+async def propose_create_tag(name: str, parent: str | None = None) -> dict:
+    """Propose creating a plain user-named tag in Things.
+
+    Use this for USER-NAMED tags — tags the user explicitly asked to create,
+    such as "admin", "Health", or "Finance". These are plain tags with no
+    asterisk wrapping.
+
+    If the user asked to create an AI-INVENTED tag (a name the agent chose
+    with no user involvement), use ``propose_create_ai_tag`` instead — it
+    enforces the asterisk-wrapper convention and files the tag under the AI
+    parent.
+
+    ``parent`` is optional: omit to create a top-level tag; supply to nest
+    the new tag under an existing (or auto-created) parent tag.
+
+    Idempotent: if the tag already exists, this is a no-op success.
+
+    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    """
+    if not config.ALLOW_APPLESCRIPT:
+        raise RuntimeError(
+            "propose_create_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+        )
+    payload_model = ProposeCreateTagInput(name=name, parent=parent)
+    payload = payload_model.model_dump()
+    preview = handlers.create_tag.make_preview(payload)
+    return await _enqueue_and_maybe_auto_confirm(
+        kind=handlers.create_tag.KIND, payload=payload, preview=preview
     )
 
 
@@ -1072,6 +1132,7 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(propose_reorder_todos)
     mcp.tool()(propose_move_under_ai_heading)
     mcp.tool()(propose_create_ai_tag)
+    mcp.tool()(propose_create_tag)
     mcp.tool()(propose_manage_ai_tag)
     mcp.tool()(propose_delete_ai_tag)
     mcp.tool()(propose_apply_ai_tags)

@@ -19,10 +19,14 @@ DUMMY_PATTERN = re.compile(r'^__[A-Z][A-Z0-9 _\-:]*__$')
 
 AI_NEWLY_ADDED_HEADING = "__NEWLY ADDED BY AI__"  # passes DUMMY_PATTERN
 
+# Visual separator placed directly ABOVE the AI marker.  Fixed 24-underscore string.
+AI_SEPARATOR_RULE = "________________________"  # 24 underscores
+SEPARATOR_PATTERN = re.compile(r'^_{6,}$')
+
 
 def is_dummy_heading(title: str) -> bool:
-    """Return True if the title matches the dummy-heading format."""
-    return bool(DUMMY_PATTERN.match(title))
+    """Return True if the title matches the dummy-heading format OR is the separator rule."""
+    return bool(DUMMY_PATTERN.match(title)) or bool(SEPARATOR_PATTERN.match(title))
 
 
 def make_dummy_title(name: str) -> str:

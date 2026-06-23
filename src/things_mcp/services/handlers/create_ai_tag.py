@@ -38,6 +38,7 @@ async def execute(payload: dict) -> dict:
 
     name = payload["name"]
     parent = payload.get("parent") or AI_TAG_PARENT
+    group_id = payload.get("group_id")
 
     # Validate asterisk wrapper (defensive — propose layer also checks)
     if not (name.startswith("*") and name.endswith("*") and len(name) > 2):
@@ -55,6 +56,7 @@ async def execute(payload: dict) -> dict:
         target_uuid=None,
         before_state={"name": name, "parent": parent, "existed": already_existed},
         after_state=None,
+        group_id=group_id,
     )
 
     if already_existed:

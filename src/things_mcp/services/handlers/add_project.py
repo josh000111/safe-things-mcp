@@ -32,6 +32,8 @@ _CLOCK_SLACK = timedelta(seconds=2)
 def make_preview(payload: dict) -> str:
     title = payload["title"]
     bits = [f"Add project {title!r}"]
+    if payload.get("area"):
+        bits.append(f"area={payload['area']!r}")
     if payload.get("area_id"):
         bits.append(f"area_id={payload['area_id']}")
     if payload.get("when"):
@@ -65,8 +67,12 @@ async def execute(payload: dict) -> dict:
 
     created_after = (datetime.now() - _CLOCK_SLACK).strftime(_CREATED_FMT)
 
+    # NOTE: area (name, auto-created by Things) is intentionally NOT removed
+    # on undo — areas are cheap to keep and Things' AppleScript cannot
+    # reliably delete areas without side-effects.
     url = url_scheme.build_add_project_url(
         title=title,
+        area=payload.get("area"),
         area_id=payload.get("area_id"),
         when=payload.get("when"),
         deadline=payload.get("deadline"),

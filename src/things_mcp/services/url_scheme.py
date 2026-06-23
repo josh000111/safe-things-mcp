@@ -184,6 +184,7 @@ def build_update_url(
 def build_add_project_url(
     *,
     title: str,
+    area: str | None = None,
     area_id: str | None = None,
     when: str | None = None,
     deadline: str | None = None,
@@ -201,6 +202,9 @@ def build_add_project_url(
       The JSON endpoint is the ONLY URL-scheme mechanism that creates
       native section headings inside a *new* project. See arch doc §5.3.
 
+    ``area`` is an area NAME; Things auto-creates the area if it doesn't
+    exist. ``area_id`` is an existing area UUID. Pass at most one.
+
     Computed views (Upcoming, Logbook, Trash) aren't relevant for projects
     so no view-rejection is needed here.
     """
@@ -210,6 +214,7 @@ def build_add_project_url(
     if headings:
         return _build_add_project_json_url(
             title=title,
+            area=area,
             area_id=area_id,
             when=when,
             deadline=deadline,
@@ -219,6 +224,8 @@ def build_add_project_url(
         )
 
     params: list[tuple[str, str]] = [("title", title)]
+    if area:
+        params.append(("area", area))
     if area_id:
         params.append(("area-id", area_id))
     if when:
@@ -236,6 +243,7 @@ def build_add_project_url(
 def _build_add_project_json_url(
     *,
     title: str,
+    area: str | None,
     area_id: str | None,
     when: str | None,
     deadline: str | None,
@@ -248,8 +256,13 @@ def _build_add_project_json_url(
     Things' JSON URL scheme wraps everything in an ``attributes`` object;
     headings are sibling items under ``items`` (Things creates them in the
     listed order at project birth).
+
+    ``area`` is an area NAME (auto-created by Things if missing).
+    ``area_id`` is an existing area UUID. Pass at most one.
     """
     project_attrs: dict[str, Any] = {"title": title}
+    if area:
+        project_attrs["area"] = area
     if area_id:
         project_attrs["area-id"] = area_id
     if when:

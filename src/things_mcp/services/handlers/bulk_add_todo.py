@@ -22,6 +22,12 @@ KIND = "bulk_add_todo"
 _CREATED_FMT = "%Y-%m-%d %H:%M:%S"
 _CLOCK_SLACK = timedelta(seconds=2)
 
+# Things URL-scheme inserts new tasks at the TOP of these list views.
+# Adding [A, B, C] sequentially yields visible order [C, B, A].
+# To produce the intended order the add loop must be reversed for these targets.
+# Project and area targets insert at the BOTTOM, so no reversal is needed there.
+_TOP_INSERTING_LISTS = {"inbox", "today"}
+
 
 def make_preview(payload: dict) -> str:
     items = payload.get("items") or []
@@ -36,6 +42,7 @@ async def execute(payload: dict) -> dict:
     list_id = payload.get("list_id") or "inbox"
     items = list(payload.get("items") or [])
     group_id = payload.get("group_id")
+    preserve_order = payload.get("preserve_order", True)
 
     if not items:
         raise ValueError("bulk_add_todo requires a non-empty items list.")
@@ -48,8 +55,19 @@ async def execute(payload: dict) -> dict:
         group_id=group_id,
     )
 
-    resolved: list[dict] = []
-    for spec in items:
+    # Determine add sequence. Top-inserting lists (inbox, today) place each new
+    # task at the TOP, so adding [A, B, C] produces visible order [C, B, A].
+    # Reversing the add sequence makes the last-added item (the caller's first)
+    # land on top, giving the intended visible order [A, B, C].
+    is_top_inserting = list_id.lower() in _TOP_INSERTING_LISTS
+    add_sequence = list(reversed(items)) if (preserve_order and is_top_inserting) else items
+
+    # resolved_map tracks uuid per spec index so we can report in the
+    # caller's original order regardless of add direction.
+    resolved_by_index: dict[int, dict] = {}
+    for add_idx, spec in enumerate(add_sequence):
+        # Map back to the original index to keep the returned list stable.
+        original_idx = (len(items) - 1 - add_idx) if (preserve_order and is_top_inserting) else add_idx
         title = spec.get("title", "")
         created_after = (datetime.now() - _CLOCK_SLACK).strftime(_CREATED_FMT)
         url = url_scheme.build_add_url_v2(
@@ -63,7 +81,10 @@ async def execute(payload: dict) -> dict:
         )
         await url_scheme.launch(url)
         verified = await _poll_for_new_todo(title, created_after)
-        resolved.append({"uuid": verified["uuid"], "title": title})
+        resolved_by_index[original_idx] = {"uuid": verified["uuid"], "title": title}
+
+    # Report resolved todos in the caller's original intended order.
+    resolved = [resolved_by_index[i] for i in range(len(items))]
 
     undo_log.update_after_state(entry_id, {"items": resolved, "count": len(resolved)})
 

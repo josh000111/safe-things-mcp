@@ -104,9 +104,23 @@ propose_add_project; if fewer than 3 tasks belong to the cluster, abstain \
 with *Unclear* instead of creating the project — the server will reject the \
 call if this rule is violated.
 
+AREA PLACEMENT ON PROJECT CREATION. To place a new project in an area, pass \
+area="<Name>" (auto-creates the area if it doesn't exist) OR area_id=<UUID> \
+(existing area, from get_areas). Pass at most one. NEVER construct raw \
+things:/// URLs or use AppleScript to create areas.
+
 AI TAG NAMING: asterisk-wrapped, Title Case, <=2-3 words, actionable imperative \
 or clear noun (e.g. *File Receipt*). The server enforces the asterisks and AI \
 parent; word count and case are conventions you uphold.
+
+TAG CREATION TOOL CHOICE: two tools exist — pick by who named the tag.
+- AI-INVENTED (the agent chose the name with no user involvement) -> \
+propose_create_ai_tag: enforces asterisk-wrapper, files under AI parent.
+- USER-NAMED (the user said e.g. "tag these with Health") -> \
+propose_create_tag: plain name, no asterisks, optional parent.
+Call ensure_ai_tags() once at session start to pre-create the flag-tag \
+vocabulary (*Unclear*, *Ambiguous Home*, *Duplicate?*, *No Time Signal*, \
+*Review Delete?*) if any are missing.
 
 SORT WORKFLOW (tag-first -> review -> move -> cleanup):
 1. Read the tasks (list_inbox/list_anytime/search) AND the FULL contents of existing destinations: get_projects/get_areas, then get_project on each candidate to read its tasks, notes, and Area (see BUILD CONTEXT FIRST).
@@ -114,16 +128,20 @@ SORT WORKFLOW (tag-first -> review -> move -> cleanup):
 3. Generate ONE group_id (a UUID) for the run and pass it to every propose_* call, so the user can undo the entire sort at once. This is REQUIRED, not optional.
 4. propose_apply_ai_tags(items=[...], group_id) -> confirm_action. Confident and abstained items go in the SAME items list (one unclear task never blocks the rest): confident items carry a transient routing tag; abstained items get a persistent abstain tag with routing=null.
 5. Review with list_ai_tags. If the user wants changes: propose_cleanup_ai_tags, adjust the plan, re-apply.
-6. Move, then confirm_action. For tasks going into an EXISTING project, use propose_move_under_ai_heading(..., group_id) so they land grouped under a __NEWLY ADDED BY AI__ marker the user can spot and audit. For tasks going into a NEW project you just created, or into an Area, use propose_bulk_move(..., group_id) - new projects and Areas do NOT get the marker.
+6. Move, then confirm_action. For tasks going into an EXISTING project, use propose_move_under_ai_heading(..., group_id) so they land grouped under a __NEWLY ADDED BY AI__ marker (with a ________________ separator above it) the user can spot and audit. For tasks going into a NEW project you just created, or into an Area, use propose_bulk_move(..., group_id) - new projects and Areas do NOT get the marker.
 7. propose_cleanup_ai_tags(..., group_id) -> confirm_action. This strips ONLY transient routing tags, never the persistent abstain tags.
 8. Tell the user the group_id and call out any tasks left flagged for their attention.
+
+REORDER GUARD: Never reorder tasks that already exist in a destination project — they stay pinned above the __NEWLY ADDED BY AI__ marker. Only reorder tasks strictly below the marker (newly added ones). If the user explicitly asks to reorder pre-existing tasks, pass allow_existing_reorder=true to propose_reorder_todos — the tool rejects the call otherwise.
 
 DISAMBIGUATION. When two projects/areas share a name, always qualify which one \
 in previews and confirmations, e.g. "Errands - in Area 'Personal'" vs "Errands - a \
 standalone project (not in any Area)".
 
 UNDO. undo_group(group_id) reverses a whole sort in LIFO order; undo() or \
-undo(undo_id) reverses a single step. There is no redo - re-run with corrections.
+undo(undo_id) reverses a single step. There is no redo - re-run with corrections. \
+After any confirmed mutation, briefly remind the user they can undo it \
+(undo() / undo_group(group_id) for a whole sort).
 
 SETUP. The AI tagging tools require THINGS_MCP_ALLOW_APPLESCRIPT=1; the first \
 call triggers a one-time macOS Automation permission prompt the user must approve.\

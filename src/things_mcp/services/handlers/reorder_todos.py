@@ -15,6 +15,7 @@ import time
 from ... import config
 from .. import applescript, things_repo, url_scheme
 from ...state import undo_log
+from .dummy_heading import AI_NEWLY_ADDED_HEADING
 
 KIND = "reorder_todos"
 
@@ -57,6 +58,7 @@ async def execute(payload: dict) -> dict:
     dummy_creation_plan = payload.get("dummy_creation_plan", [])
     original_order = payload["original_order"]
     created_dummy_uuids: list[str] = list(payload.get("created_dummy_uuids", []))
+    allow_existing_reorder: bool = bool(payload.get("allow_existing_reorder", False))
 
     # Validate container_id early to prevent AppleScript injection
     if '"' in container_id or '\\' in container_id:
@@ -67,7 +69,34 @@ async def execute(payload: dict) -> dict:
         )
 
     # Pre-flight read (call 1) — establishes baseline for race-window detection
-    things_repo.get_container_todo_uuids(container_type, container_id)
+    current_uuids_preflight = things_repo.get_container_todo_uuids(container_type, container_id)
+
+    # Anti-priority-sort guard: if a __NEWLY ADDED BY AI__ marker is present,
+    # block reordering of tasks at or above it unless allow_existing_reorder=True.
+    # "Reordering" means the UUID ended up at a different position than it held in
+    # original_order — tasks that stay in place don't trigger the guard.
+    if not allow_existing_reorder and container_type == "project":
+        marker_idx: int | None = None
+        for i, u in enumerate(current_uuids_preflight):
+            row = things_repo.get_todo(u)
+            if row is not None and row.get("title") == AI_NEWLY_ADDED_HEADING:
+                marker_idx = i
+                break
+        if marker_idx is not None:
+            protected = set(current_uuids_preflight[: marker_idx + 1])
+            # Find UUIDs that changed position relative to original_order.
+            original_positions = {u: i for i, u in enumerate(original_order)}
+            actually_moved = {
+                u for i, u in enumerate(master_order)
+                if original_positions.get(u, -1) != i
+            }
+            blocked = actually_moved & protected
+            if blocked:
+                raise ValueError(
+                    f"Reordering tasks at or above the {AI_NEWLY_ADDED_HEADING!r} marker "
+                    "is blocked so your existing tasks stay pinned at the top. "
+                    "Pass allow_existing_reorder=true to override."
+                )
 
     # Create dummy heading tasks for each native heading that needs conversion
     if dummy_creation_plan:

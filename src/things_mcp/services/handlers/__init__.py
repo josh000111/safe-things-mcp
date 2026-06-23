@@ -40,6 +40,7 @@ from . import (
     cleanup_ai_tags,
     complete_todo,
     create_ai_tag,
+    create_tag,
     delete_ai_tag,
     delete_heading,
     delete_project,
@@ -93,6 +94,7 @@ REGISTRY: dict[str, Handler] = {
     replace_checklist.KIND: replace_checklist,  # type: ignore[dict-item]
     reorder_todos.KIND: reorder_todos,  # type: ignore[dict-item]
     create_ai_tag.KIND: create_ai_tag,  # type: ignore[dict-item]
+    create_tag.KIND: create_tag,  # type: ignore[dict-item]
     manage_ai_tag.KIND: manage_ai_tag,  # type: ignore[dict-item]
     delete_ai_tag.KIND: delete_ai_tag,  # type: ignore[dict-item]
     apply_ai_tags.KIND: apply_ai_tags,  # type: ignore[dict-item]
