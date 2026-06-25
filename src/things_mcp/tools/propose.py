@@ -218,14 +218,13 @@ async def propose_add_project(
     native section headings at project birth. Without headings the
     unauthenticated ``add-project`` URL is used.
 
-    ``area`` (area NAME) places the project in an area, auto-creating the
-    area in Things if it doesn't exist yet. ``area_id`` places the project
-    in an existing area by UUID. Pass at most one — they are mutually
+    ``area`` (area NAME) places the project in an **existing** area by name;
+    it must already exist (it is NOT auto-created). ``area_id`` places the
+    project in an existing area by UUID. Pass at most one — they are mutually
     exclusive.
 
     Undo cancels the created project (canceled+completed → Logbook).
     Undo requires ``THINGS_AUTH_TOKEN`` even though execute does not.
-    Note: an auto-created area is NOT removed on undo.
 
     **Sort-session contract:** when a sort session is active,
     ``member_todo_ids`` MUST be provided and contain at least 3 task UUIDs

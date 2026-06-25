@@ -82,7 +82,12 @@ async def execute(payload: dict) -> dict:
     # params that will put the task back where it was.
     if target_lower == "inbox":
         move_params: dict[str, Any] = {}  # handled via AppleScript below
+        # Moving to Inbox is cross-dimensional: it changes the schedule AND
+        # removes the task from its project. Capture BOTH so undo restores both.
         inverse_params = _inverse_scheduling(before)
+        original_project = before.get("project")
+        if original_project:
+            inverse_params["list_id"] = original_project
         dimension = "inbox"
     elif target_lower in _WHEN_KEYWORDS:
         move_params = {"when": target_lower}

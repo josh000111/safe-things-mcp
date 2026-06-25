@@ -156,8 +156,8 @@ class ProposeAddProjectInput(BaseModel):
         default=None,
         min_length=1,
         description=(
-            "Area NAME — auto-created by Things if it doesn't exist. "
-            "Mutually exclusive with area_id."
+            "Area NAME — must already exist (Things cannot create areas via "
+            "the URL scheme). Mutually exclusive with area_id."
         ),
     )
     area_id: str | None = Field(default=None, min_length=1)
@@ -167,8 +167,8 @@ class ProposeAddProjectInput(BaseModel):
         if self.area is not None and self.area_id is not None:
             raise ValueError(
                 "area and area_id are mutually exclusive: use area='<Name>' "
-                "to auto-create an area by name, or area_id='<UUID>' to "
-                "reference an existing area by UUID — not both."
+                "to place the project in an existing area by name, or "
+                "area_id='<UUID>' to reference an existing area by UUID — not both."
             )
         return self
     when: str | None = Field(

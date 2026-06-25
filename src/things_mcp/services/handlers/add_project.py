@@ -67,9 +67,16 @@ async def execute(payload: dict) -> dict:
 
     created_after = (datetime.now() - _CLOCK_SLACK).strftime(_CREATED_FMT)
 
-    # NOTE: area (name, auto-created by Things) is intentionally NOT removed
-    # on undo — areas are cheap to keep and Things' AppleScript cannot
-    # reliably delete areas without side-effects.
+    area = payload.get("area")
+    if area:
+        known = {a["title"] for a in things_repo.areas()}
+        if area not in known:
+            raise ValueError(
+                f"Area {area!r} does not exist. Things' URL scheme cannot create "
+                f"areas — create it in Things first, or pass area_id. "
+                f"Known areas: {sorted(known)}"
+            )
+
     url = url_scheme.build_add_project_url(
         title=title,
         area=payload.get("area"),

@@ -1,13 +1,13 @@
 """``delete_project`` handler — move a project to Things Trash via AppleScript.
 
 Uses AppleScript ``delete`` which moves the project to Things Trash.
-Undo uses AppleScript ``move to do id X to list "Anytime"`` (safe
-fallback; original area restore via AppleScript is not supported by
-Things' SDEF).
+Undo uses AppleScript to move the project back to Anytime (original area
+restore is not supported by Things' SDEF).
 
-``to do id`` is used instead of ``project id`` because the latter only
-resolves active/incomplete projects — cancelled projects in the Logbook
-are unreachable via ``project id``.
+The delete and undo scripts use a ``try … on error … end try`` cascade:
+``project id`` is tried first (works for URL-scheme-created and active
+projects); on failure falls back to ``to do id`` (needed for cancelled/
+Logbook projects that are unreachable via ``project id``).
 
 This kind is in ``NEVER_BYPASS_KINDS`` — explicit confirm required.
 
@@ -78,7 +78,15 @@ async def execute(payload: dict) -> dict:
     )
 
     safe_id = applescript.escape(project_id)
-    script = f'tell application "Things3" to delete (to do id "{safe_id}")'
+    script = (
+        f'tell application "Things3"\n'
+        f'    try\n'
+        f'        delete (project id "{safe_id}")\n'
+        f'    on error\n'
+        f'        delete (to do id "{safe_id}")\n'
+        f'    end try\n'
+        f'end tell'
+    )
     await applescript.run_script(script)
 
     undo_log.attach_target(entry_id, target_uuid=project_id, after_state={"status": "trashed"})
@@ -120,7 +128,11 @@ async def undo(undo_entry: dict) -> dict:
     safe_id = applescript.escape(target_uuid)
     script = (
         f'tell application "Things3"\n'
-        f'    move (to do id "{safe_id}") to list "Anytime"\n'
+        f'    try\n'
+        f'        move (project id "{safe_id}") to list "Anytime"\n'
+        f'    on error\n'
+        f'        move (to do id "{safe_id}") to list "Anytime"\n'
+        f'    end try\n'
         f'    return ""\n'
         f'end tell'
     )
