@@ -86,9 +86,11 @@ Verify: ask the agent *"call health()"* and confirm `url_scheme_auth_token_set: 
 
 things-mcp triggers two macOS permission dialogs.
 
-**1. "python would like to access data from other apps"**
+**1. "python would like to access data from other apps"** (the dialog may instead name **"claude"** -- see below)
 
 things-mcp reads the Things 3 database directly from Things' protected app-container folder. macOS (TCC) asks for consent before another app's data can be read.
+
+The app named in the dialog is whichever process macOS holds *responsible* for the access, not "things-mcp". When the server runs on a plain Python interpreter that the client launches directly, you see **"python"**. When the client wraps the server in a helper process (notably Claude Desktop), macOS walks up to the parent app and you see **"claude"** instead. Either way it is the same prompt about the same Things-database access.
 
 macOS only remembers that consent for a program with a stable, signed identity. When the server runs on a plain Python interpreter, macOS sees an anonymous program and re-prompts on essentially every launch. This affects every Things MCP server that reads the database through an unsigned interpreter -- it is not specific to this project.
 
