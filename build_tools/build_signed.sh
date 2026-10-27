@@ -37,7 +37,10 @@ if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
 fi
 if ! security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
   echo "==> Importing certificate into login keychain"
-  openssl pkcs12 -export -inkey "$KEY" -in "$CERT" -out "$P12" \
+  # -legacy: modern OpenSSL (3.x+) defaults to a PKCS12 MAC/cipher that macOS
+  # Keychain's older parser rejects with "MAC verification failed" even with
+  # the correct password. -legacy forces the RC2/SHA1 format Keychain expects.
+  openssl pkcs12 -export -legacy -inkey "$KEY" -in "$CERT" -out "$P12" \
     -passout "pass:$P12_PASS" -name "$IDENTITY"
   security import "$P12" -k "$HOME/Library/Keychains/login.keychain-db" \
     -P "$P12_PASS" -T /usr/bin/codesign -A
