@@ -44,13 +44,13 @@ async def execute(payload: dict) -> dict:
     if target_lower in _REJECT_KEYWORDS:
         raise ValueError(
             f"target={target!r} not supported by bulk_move. "
-            "Supported: 'inbox' (requires THINGS_MCP_ALLOW_APPLESCRIPT=1), "
+            "Supported: 'inbox' (requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1), "
             "'today', 'anytime', 'someday', or a project/area UUID."
         )
 
     if target_lower == "inbox" and not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Bulk move to Inbox requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Bulk move to Inbox requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -160,7 +160,7 @@ async def undo(undo_entry: dict) -> dict:
         if not config.ALLOW_APPLESCRIPT:
             raise RuntimeError(
                 "Cannot undo bulk_move back to Inbox without "
-                "THINGS_MCP_ALLOW_APPLESCRIPT=1. Set it and retry."
+                "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. Set it and retry."
             )
         lines = "\n".join(
             f'    move to do id "{applescript.escape(it["target_uuid"])}" to list "Inbox"'

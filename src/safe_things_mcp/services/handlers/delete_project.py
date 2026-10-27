@@ -11,7 +11,7 @@ Logbook projects that are unreachable via ``project id``).
 
 This kind is in ``NEVER_BYPASS_KINDS`` — explicit confirm required.
 
-Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ async def execute(payload: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "delete_project requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "delete_project requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -114,7 +114,7 @@ async def undo(undo_entry: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Cannot undo delete_project without THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Cannot undo delete_project without SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 

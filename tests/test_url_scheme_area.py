@@ -14,10 +14,10 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import pytest
 
-from things_mcp.models import ProposeAddProjectInput
-from things_mcp.services import url_scheme
-from things_mcp.services import things_repo
-from things_mcp.services.handlers import add_project
+from safe_things_mcp.models import ProposeAddProjectInput
+from safe_things_mcp.services import url_scheme
+from safe_things_mcp.services import things_repo
+from safe_things_mcp.services.handlers import add_project
 
 
 # ---------- build_add_project_url — plain path (no headings) ----------
@@ -138,7 +138,7 @@ pytestmark = pytest.mark.usefixtures("isolated_state_db")
 
 @pytest.fixture
 def fast_polling(monkeypatch):
-    from things_mcp import config
+    from safe_things_mcp import config
     monkeypatch.setattr(config, "WRITE_POLL_TIMEOUT_SECONDS", 1.0)
     monkeypatch.setattr(config, "WRITE_POLL_INTERVAL_SECONDS", 0.01)
 

@@ -1,4 +1,4 @@
-"""SQLite bootstrap for ~/.things-mcp/state.db."""
+"""SQLite bootstrap for ~/.safe-things-mcp/state.db."""
 from __future__ import annotations
 
 import sqlite3

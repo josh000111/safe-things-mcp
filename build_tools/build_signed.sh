@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a signed, standalone things-mcp binary with a STABLE code identity.
+# Build a signed, standalone safe-things-mcp binary with a STABLE code identity.
 #
 # WHY: macOS only "remembers" the "would like to access data from other apps"
 # permission for a program that has a stable, signed identity. The plain Python
@@ -19,8 +19,8 @@ BUILD="$REPO_DIR/build_tools"
 CERT="$BUILD/selfsign_cert.pem"
 KEY="$BUILD/selfsign_key.pem"
 P12="$BUILD/selfsign.p12"
-IDENTITY="things-mcp-selfsigned"
-P12_PASS="things-mcp-build"
+IDENTITY="safe-things-mcp-selfsigned"
+P12_PASS="safe-things-mcp-build"
 
 cd "$REPO_DIR"
 
@@ -45,21 +45,21 @@ fi
 
 # 2) Freeze the server into one standalone bundle.
 echo "==> Building standalone binary with PyInstaller"
-rm -rf "$REPO_DIR/dist_signed" "$BUILD/pyi_work" "$BUILD/things-mcp.spec"
+rm -rf "$REPO_DIR/dist_signed" "$BUILD/pyi_work" "$BUILD/safe-things-mcp.spec"
 uv run --with pyinstaller pyinstaller \
-  --noconfirm --onedir --name things-mcp \
-  --collect-submodules mcp.server --collect-all things --collect-submodules things_mcp \
+  --noconfirm --onedir --name safe-things-mcp \
+  --collect-submodules mcp.server --collect-all things --collect-submodules safe_things_mcp \
   --exclude-module typer --exclude-module mcp.cli \
   --distpath "$REPO_DIR/dist_signed" --workpath "$BUILD/pyi_work" --specpath "$BUILD" \
   "$BUILD/freeze_entry.py"
 
 # 3) Sign with the stable identity.
 echo "==> Signing the binary"
-codesign --force --sign "$IDENTITY" "$REPO_DIR/dist_signed/things-mcp/things-mcp"
-codesign -dv --verbose=2 "$REPO_DIR/dist_signed/things-mcp/things-mcp" 2>&1 \
+codesign --force --sign "$IDENTITY" "$REPO_DIR/dist_signed/safe-things-mcp/safe-things-mcp"
+codesign -dv --verbose=2 "$REPO_DIR/dist_signed/safe-things-mcp/safe-things-mcp" 2>&1 \
   | grep -E "Authority|Signature|Identifier" || true
 
-BIN="$REPO_DIR/dist_signed/things-mcp/things-mcp"
+BIN="$REPO_DIR/dist_signed/safe-things-mcp/safe-things-mcp"
 cat <<EOF
 
 ==> Done. Signed program:
@@ -71,17 +71,17 @@ PASTE-YOUR-THINGS-TOKEN with the token from Things -> Settings -> General -> Man
 
 {
   "mcpServers": {
-    "things-mcp": {
+    "safe-things-mcp": {
       "command": "$BIN",
       "env": {
         "THINGS_AUTH_TOKEN": "PASTE-YOUR-THINGS-TOKEN",
-        "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
+        "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT": "1"
       }
     }
   }
 }
 
-Then fully quit and reopen the client. You'll get ONE "things-mcp would like to
+Then fully quit and reopen the client. You'll get ONE "safe-things-mcp would like to
 access data from other apps" prompt -- click Allow.
 
 - Direct-launch clients (Cursor, VS Code, Codex): the approval should be
@@ -91,5 +91,5 @@ access data from other apps" prompt -- click Allow.
           -k /Library/Keychains/System.keychain "$CERT"
 - Claude Desktop: the prompt recurs every launch regardless of signing
   (upstream bug anthropics/claude-code#36832) -- but it will at least say
-  "things-mcp" so you know what you're approving.
+  "safe-things-mcp" so you know what you're approving.
 EOF

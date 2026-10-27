@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import pytest
 
-from things_mcp import config
-from things_mcp.services import applescript, things_repo, url_scheme
-from things_mcp.services.handlers import move_todo
-from things_mcp.state import undo_log
+from safe_things_mcp import config
+from safe_things_mcp.services import applescript, things_repo, url_scheme
+from safe_things_mcp.services.handlers import move_todo
+from safe_things_mcp.state import undo_log
 
 
 pytestmark = pytest.mark.usefixtures("isolated_state_db")

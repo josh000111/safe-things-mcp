@@ -19,7 +19,7 @@ from typing import TypedDict
 # ---------------------------------------------------------------------------
 
 def _default_key_path() -> Path:
-    """Resolve sort-eval/harness/test5-key.json relative to this file (src/things_mcp/eval/)."""
+    """Resolve sort-eval/harness/test5-key.json relative to this file (src/safe_things_mcp/eval/)."""
     return Path(__file__).parent.parent.parent.parent / "sort-eval" / "harness" / "test5-key.json"
 
 
@@ -441,7 +441,7 @@ def _build_expected_desc(task: dict, cluster_info: dict) -> str:
 def collect_live_states(key: dict) -> dict[str, TaskState]:
     """Read current Things state and build states dict keyed by task title."""
     # Deferred import so the module loads cleanly without Things running.
-    from things_mcp.services import things_repo  # noqa: PLC0415
+    from safe_things_mcp.services import things_repo  # noqa: PLC0415
 
     titles_to_find = {_norm(t["title"]): t["title"] for t in key["tasks"]}
     found: dict[str, TaskState] = {}

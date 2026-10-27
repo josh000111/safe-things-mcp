@@ -51,7 +51,7 @@ async def execute(payload: dict) -> dict:
     if target_lower in _REJECT_KEYWORDS:
         raise ValueError(
             f"target={target!r} not supported by propose_move_todo. "
-            "Supported targets: 'inbox' (requires THINGS_MCP_ALLOW_APPLESCRIPT=1), "
+            "Supported targets: 'inbox' (requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1), "
             "'today', 'anytime', 'someday', or a project/area UUID."
         )
     if not target:
@@ -59,7 +59,7 @@ async def execute(payload: dict) -> dict:
 
     if target_lower == "inbox" and not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Moving to Inbox requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "Moving to Inbox requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -179,7 +179,7 @@ async def undo(undo_entry: dict) -> dict:
         if not config.ALLOW_APPLESCRIPT:
             raise RuntimeError(
                 "Cannot undo move_todo back to Inbox without "
-                "THINGS_MCP_ALLOW_APPLESCRIPT=1. Set it and retry."
+                "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. Set it and retry."
             )
         safe_id = applescript.escape(target_uuid)
         script = (

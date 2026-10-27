@@ -14,7 +14,7 @@ Algorithm:
 
 Undo (LIFO): restore prior order → move tasks back → cancel marker if created here.
 
-Requires THINGS_AUTH_TOKEN and THINGS_MCP_ALLOW_APPLESCRIPT=1.
+Requires THINGS_AUTH_TOKEN and SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1.
 """
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ async def execute(payload: dict) -> dict:
 
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "move_under_ai_heading requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "move_under_ai_heading requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -180,7 +180,7 @@ async def undo(undo_entry: dict) -> dict:
 
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Cannot undo move_under_ai_heading without THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "Cannot undo move_under_ai_heading without SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
 
     # Step 1: Restore prior to-do order via AppleScript.

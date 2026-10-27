@@ -18,7 +18,7 @@ from .tools import confirm, meta, propose, read, undo, write
 # uses the old cooking examples (carbonara/cake) — sync the RULES from it, never
 # the example nouns. See docs/sort-issues-tracker.md issue B1.
 AGENT_INSTRUCTIONS = """\
-things-mcp controls Things 3 on macOS. Reads are safe. Every mutation is logged \
+safe-things-mcp controls Things 3 on macOS. Reads are safe. Every mutation is logged \
 so undo()/undo_group() can reverse it.
 
 CHOOSING A WRITE TOOL. Two write paths exist:
@@ -31,7 +31,7 @@ These tools still log to undo_log, so they are always reversible.
 - propose_* tools: stage an action for review before execution. Use these when \
 targeting a project or area UUID, when placement requires judgment, or for any \
 destructive or bulk operation. All propose_* calls require confirm_action() to \
-execute, except when THINGS_MCP_AUTO_CONFIRM=1 (destructive and bulk ops always \
+execute, except when SAFE_THINGS_MCP_AUTO_CONFIRM=1 (destructive and bulk ops always \
 require explicit confirm regardless).
 
 The rules below apply ONLY when you are making a SEMANTIC JUDGMENT about the \
@@ -143,14 +143,14 @@ undo(undo_id) reverses a single step. There is no redo - re-run with corrections
 After any confirmed mutation, briefly remind the user they can undo it \
 (undo() / undo_group(group_id) for a whole sort).
 
-SETUP. The AI tagging tools require THINGS_MCP_ALLOW_APPLESCRIPT=1; the first \
+SETUP. The AI tagging tools require SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1; the first \
 call triggers a one-time macOS Automation permission prompt the user must approve.\
 """
 
 
 def build_server() -> FastMCP:
     init_state_db()
-    mcp = FastMCP("things-mcp", instructions=AGENT_INSTRUCTIONS)
+    mcp = FastMCP("safe-things-mcp", instructions=AGENT_INSTRUCTIONS)
     read.register(mcp)
     write.register(mcp)
     propose.register(mcp)

@@ -1,4 +1,4 @@
-# things-mcp — Project Instructions
+# safe-things-mcp — Project Instructions
 
 Adds to (does not override) `~/.claude/CLAUDE.md`. Governs **dev and in-repo testing only** — does not travel with the MCP to end users. Runtime safety must live in the code, not here.
 
@@ -21,9 +21,9 @@ No mutating tool ships in V2 without (a) an inverse URL-scheme call, (b) a row w
 Overrides the global ask-before-complete fallback. Before claiming a task done:
 
 1. `uv run pytest` — all green (or state clearly that no tests cover the change).
-2. `uv run things-mcp --help` runs without error.
+2. `uv run safe-things-mcp --help` runs without error.
 3. `health()` returns `things_db_path`, `things_app_running=true`, `things_py_version`, `state_db_exists=true`.
-4. Write-path / URL-scheme changes: run relevant items from `tests/things-mcp-manual-verification.md` as the `Test` user.
+4. Write-path / URL-scheme changes: run relevant items from `tests/safe-things-mcp-manual-verification.md` as the `Test` user.
 5. V2 destructive ops: undo round-trip proven.
 
 If a step can't run in the current environment, say so explicitly — never silently skip.

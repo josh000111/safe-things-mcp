@@ -112,7 +112,7 @@ class ProposeMoveTodoInput(BaseModel):
 
     ``target`` accepts:
 
-    * ``"inbox"`` — move to Inbox (requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``).
+    * ``"inbox"`` — move to Inbox (requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``).
     * ``"today"`` / ``"anytime"`` / ``"someday"`` — scheduling move
       (preserves project/area membership).
     * A 22-char Things UUID — project/area membership change.
@@ -128,10 +128,10 @@ class ProposeDeleteTodoInput(BaseModel):
     """V2 step 5A — propose deleting a to-do via AppleScript.
 
     Moves the task to Things Trash (the same as deleting manually in the
-    Things UI). Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Things UI). Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 
     This kind is in ``NEVER_BYPASS_KINDS`` — even with
-    ``THINGS_MCP_AUTO_CONFIRM=1`` the user must explicitly call
+    ``SAFE_THINGS_MCP_AUTO_CONFIRM=1`` the user must explicitly call
     ``confirm_action``.
     """
     todo_id: str = Field(..., min_length=1)
@@ -252,7 +252,7 @@ class ProposeBulkDeleteInput(BaseModel):
     """V2 — propose deleting N to-dos (move to Things Trash) in one airlocked op.
 
     Always in :data:`config.NEVER_BYPASS_KINDS` — explicit confirm required.
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     todo_ids: list[str] = Field(..., min_length=1)
     group_id: str | None = Field(default=None, description="Optional group tag written to undo_log; enables undo_group() to reverse this op atomically with others sharing the same id.")
@@ -387,7 +387,7 @@ class ProposeCreateAiTagInput(BaseModel):
 
     The name MUST be asterisk-wrapped: ``*Do Taxes*``. Server enforces
     this structural invariant. Parent defaults to the configured
-    THINGS_MCP_AI_TAG_PARENT (default "AI").
+    SAFE_THINGS_MCP_AI_TAG_PARENT (default "AI").
     """
     name: str = Field(..., min_length=3)
     parent: str = Field(default="AI", min_length=1)
@@ -493,7 +493,7 @@ class ProposeMoveUnderAiHeadingInput(BaseModel):
     newly moved tasks appear below it. Safe to call multiple times for the
     same project; successive batches append under the marker.
 
-    Requires ``THINGS_AUTH_TOKEN`` and ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``THINGS_AUTH_TOKEN`` and ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     todo_ids: list[str] = Field(..., min_length=1)
     project_id: str = Field(..., min_length=1)

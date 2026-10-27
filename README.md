@@ -1,4 +1,4 @@
-# things-mcp
+# Safe Things MCP
 
 Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude Desktop, Claude Code, Cursor, Codex, and others) read and write your entire Things database -- tasks, projects, headings, checklists, tags, and more.
 
@@ -43,8 +43,8 @@ Most Things MCP servers offer basic reads and direct URL-scheme writes. This one
 ## Install
 
 ```bash
-git clone https://github.com/josh000111/things-mcp things-mcp
-cd things-mcp
+git clone https://github.com/josh000111/safe-things-mcp safe-things-mcp
+cd safe-things-mcp
 uv venv --python /opt/homebrew/bin/python3
 uv sync
 ```
@@ -52,7 +52,7 @@ uv sync
 Verify the install:
 
 ```bash
-.venv/bin/things-mcp --help
+.venv/bin/safe-things-mcp --help
 ```
 
 There are two ways to run the server. See [Two ways to run it](#two-ways-to-run-it) for the full comparison.
@@ -64,7 +64,7 @@ There are two ways to run the server. See [Two ways to run it](#two-ways-to-run-
 ./build_tools/build_signed.sh
 ```
 
-This produces a self-contained signed binary at `dist_signed/things-mcp/things-mcp` and prints a ready-to-paste client config block.
+This produces a self-contained signed binary at `dist_signed/safe-things-mcp/safe-things-mcp` and prints a ready-to-paste client config block.
 
 ---
 
@@ -75,7 +75,7 @@ Read tools work immediately with no configuration. The steps below are only need
 1. Things > Settings > General > **Enable Things URLs** (toggle on if not already).
 2. Click **Manage**, copy the auth token.
 3. Add it to your MCP client's env block as `THINGS_AUTH_TOKEN`.
-4. For delete, reorder, and AI tagging operations, also add `THINGS_MCP_ALLOW_APPLESCRIPT=1` to the same env block.
+4. For delete, reorder, and AI tagging operations, also add `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1` to the same env block.
 5. Restart the client.
 6. Pre-create the AI flag tags (once, idempotent): ask the agent to call `ensure_ai_tags()`. This creates the `AI` parent tag and the five abstain flags (`*Unclear*`, `*Ambiguous Home*`, etc.) if any are missing.
 
@@ -84,13 +84,13 @@ Verify: ask the agent *"call health()"* and confirm `url_scheme_auth_token_set: 
 <details>
 <summary><strong>macOS permission prompts -- what to expect</strong></summary>
 
-things-mcp triggers two macOS permission dialogs.
+safe-things-mcp triggers two macOS permission dialogs.
 
 **1. "python would like to access data from other apps"** (the dialog may instead name **"claude"** -- see below)
 
-things-mcp reads the Things 3 database directly from Things' protected app-container folder. macOS (TCC) asks for consent before another app's data can be read.
+safe-things-mcp reads the Things 3 database directly from Things' protected app-container folder. macOS (TCC) asks for consent before another app's data can be read.
 
-The app named in the dialog is whichever process macOS holds *responsible* for the access, not "things-mcp". When the server runs on a plain Python interpreter that the client launches directly, you see **"python"**. When the client wraps the server in a helper process (notably Claude Desktop), macOS walks up to the parent app and you see **"claude"** instead. Either way it is the same prompt about the same Things-database access.
+The app named in the dialog is whichever process macOS holds *responsible* for the access, not "safe-things-mcp". When the server runs on a plain Python interpreter that the client launches directly, you see **"python"**. When the client wraps the server in a helper process (notably Claude Desktop), macOS walks up to the parent app and you see **"claude"** instead. Either way it is the same prompt about the same Things-database access.
 
 macOS only remembers that consent for a program with a stable, signed identity. When the server runs on a plain Python interpreter, macOS sees an anonymous program and re-prompts on essentially every launch. This affects every Things MCP server that reads the database through an unsigned interpreter -- it is not specific to this project.
 
@@ -103,9 +103,28 @@ macOS only remembers that consent for a program with a stable, signed identity. 
 > - Grant Full Disk Access to Claude (System Settings > Privacy & Security > Full Disk Access > add `/Applications/Claude.app`). This persists because it attaches to the Claude app itself. Note: this is a broad grant -- it removes the OS file-access guardrail for everything Claude runs (every MCP server and agent action). It does not bypass Claude's own per-tool approval prompts. **or**
 > - Live with the prompt for now and wait for the upstream fix.
 
-**2. "things-mcp wants to control Things 3"**
+> **Update, 2026-10-16 -- confirmed on a current Claude Desktop build (2.42304.0, bundled CLI 2.1.299, macOS 26.x).** On this combination the behavior is worse than "recurs": **no prompt appears at all**, and the read silently fails with `unable to open database file`. Live process trace confirmed the actual launch chain is four hops deep:
+>
+> ```
+> Claude.app -> Contents/Helpers/disclaimer -> bundled claude-code CLI -> uv run -> python3.11 (safe-things-mcp)
+> ```
+>
+> This matches the root cause described in currently-open upstream issues (checked same day): [anthropics/claude-code#92784](https://github.com/anthropics/claude-code/issues/92784) ("grant stored session-scoped"), [#83841](https://github.com/anthropics/claude-code/issues/83841), [#87833](https://github.com/anthropics/claude-code/issues/87833). The original #36832 cited above was closed as a duplicate on 2026-03-24; the bug itself is still open under these newer reports.
+>
+> **Tested on this chain, in order, same day:**
+> | Attempt | Result |
+> |---|---|
+> | Manually add `python3.11`'s `Python.app` (the exact leaf binary, e.g. `/opt/homebrew/Cellar/python@3.11/<version>/Frameworks/Python.framework/Versions/3.11/Resources/Python.app`) to Full Disk Access | **Failed** -- still `unable to open database file` after full quit/relaunch |
+> | Manually add `uv` (`~/.local/bin/uv`, the direct parent of the python process) to Full Disk Access | **Failed** -- same error, after full quit/relaunch |
+> | Grant Full Disk Access to `/Applications/Claude.app` itself (the broad option) | *pending confirmation -- update this row once tested* |
+>
+> Both scoped attempts failing points to macOS resolving the TCC "responsible process" all the way up the chain (to Claude.app or its bundled CLI worker), not to the leaf binary actually touching the file -- so narrower per-binary grants do not help on this launch path. If you're on Claude Desktop and hit the silent-failure variant (not just a recurring prompt), scoped grants are not worth trying first; go straight to broad Claude.app Full Disk Access, or avoid the Desktop wrapper entirely by running the standalone `claude` CLI (not the Desktop app's bundled copy) as a direct-launch client -- that path is architecturally identical to Cursor/VS Code above and Option B's signed-binary fix applies normally there.
+>
+> One version-pinning note from the same investigation: this venv's Python symlinks through `/opt/homebrew/opt/python@3.11/` (Homebrew's "current version" pointer), not a hardcoded patch version. A `brew upgrade python@3.11` moves that pointer to a new Cellar path and will invalidate any grant tied to the old path -- this is a real, separate cause of permission churn, distinct from the Claude Desktop wrapper issue above.
 
-Appears the first time an AppleScript-backed operation runs (requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow** once. This Automation grant persists.
+**2. "safe-things-mcp wants to control Things 3"**
+
+Appears the first time an AppleScript-backed operation runs (requires `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow** once. This Automation grant persists.
 
 </details>
 
@@ -121,12 +140,12 @@ Point your client straight at the repo. uv fetches, builds, and runs the server 
 ```json
 {
   "mcpServers": {
-    "things-mcp": {
+    "safe-things-mcp": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/josh000111/things-mcp", "things-mcp"],
+      "args": ["--from", "git+https://github.com/josh000111/safe-things-mcp", "safe-things-mcp"],
       "env": {
         "THINGS_AUTH_TOKEN": "paste-token-here",
-        "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
+        "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT": "1"
       }
     }
   }
@@ -148,16 +167,16 @@ Build the signed binary once:
 ./build_tools/build_signed.sh
 ```
 
-Then point your client's `command` at the printed path (`dist_signed/things-mcp/things-mcp`).
+Then point your client's `command` at the printed path (`dist_signed/safe-things-mcp/safe-things-mcp`).
 
-**Trade-off:** updates require `git pull && uv sync && ./build_tools/build_signed.sh` followed by a client restart. The permission prompt shows "things-mcp" and on direct-launch clients (Cursor, VS Code, Claude Code) it is remembered after one approval.
+**Trade-off:** updates require `git pull && uv sync && ./build_tools/build_signed.sh` followed by a client restart. The permission prompt shows "safe-things-mcp" and on direct-launch clients (Cursor, VS Code, Claude Code) it is remembered after one approval.
 
 </details>
 
 | Client | Option A -- uvx | Option B -- signed bundle |
 |---|---|---|
-| **Claude Desktop** | "python3.11", every launch | "things-mcp", every launch (upstream bug) |
-| **Cursor / VS Code / Claude Code** | "python3.11", recurs | "things-mcp", once then remembered |
+| **Claude Desktop** | "python3.11", every launch | "safe-things-mcp", every launch (upstream bug) |
+| **Cursor / VS Code / Claude Code** | "python3.11", recurs | "safe-things-mcp", once then remembered |
 | Updates | trivial / auto | manual rebuild |
 
 **Rule of thumb:** primarily on Claude Desktop and want effortless updates -- Option A (the prompt recurs either way there, so you give up little). On Cursor, VS Code, or Claude Code and want the prompt to stop -- Option B.
@@ -175,10 +194,10 @@ Then point your client's `command` at the printed path (`dist_signed/things-mcp/
 {
   "mcpServers": {
     "things": {
-      "command": "/absolute/path/to/things-mcp/dist_signed/things-mcp/things-mcp",
+      "command": "/absolute/path/to/safe-things-mcp/dist_signed/safe-things-mcp/safe-things-mcp",
       "env": {
         "THINGS_AUTH_TOKEN": "paste-token-here",
-        "THINGS_MCP_ALLOW_APPLESCRIPT": "1"
+        "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT": "1"
       }
     }
   }
@@ -193,8 +212,8 @@ Then point your client's `command` at the printed path (`dist_signed/things-mcp/
 ```bash
 claude mcp add things \
   -e THINGS_AUTH_TOKEN=paste-token-here \
-  -e THINGS_MCP_ALLOW_APPLESCRIPT=1 \
-  -- /absolute/path/to/things-mcp/dist_signed/things-mcp/things-mcp
+  -e SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1 \
+  -- /absolute/path/to/safe-things-mcp/dist_signed/safe-things-mcp/safe-things-mcp
 ```
 
 </details>
@@ -250,7 +269,7 @@ Each `propose_*` call returns a preview for you to approve before anything is wr
 >
 > - **Complete** -- marks a task done. Moves to the Things Logbook.
 > - **Cancel** -- marks a task as not happening. Also moves to the Logbook. Use when something won't be done but you want to keep a record.
-> - **Delete** -- moves a task or project to Things Trash. Trash auto-empties after 30 days. Use when you want it gone. Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`.
+> - **Delete** -- moves a task or project to Things Trash. Trash auto-empties after 30 days. Use when you want it gone. Requires `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`.
 
 **To-do operations**
 
@@ -293,7 +312,7 @@ Each `propose_*` call returns a preview for you to approve before anything is wr
 |---|---|
 | `propose_reorder_todos` † | Reorder to-dos within a list or project |
 
-**Bulk operations** (always require explicit confirm, regardless of `THINGS_MCP_AUTO_CONFIRM`)
+**Bulk operations** (always require explicit confirm, regardless of `SAFE_THINGS_MCP_AUTO_CONFIRM`)
 
 | Tool | What it does |
 |---|---|
@@ -310,7 +329,7 @@ Each `propose_*` call returns a preview for you to approve before anything is wr
 |---|---|
 | `propose_bulk_delete_heading` | Soft-delete multiple dummy headings from a project in one operation |
 
-**AI tagging operations** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1` -- see [AI Tagging](#ai-tagging))
+**AI tagging operations** (require `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1` -- see [AI Tagging](#ai-tagging))
 
 | Tool | What it does |
 |---|---|
@@ -321,7 +340,7 @@ Each `propose_*` call returns a preview for you to approve before anything is wr
 | `propose_delete_ai_tag` †† | Delete an AI tag, removes it from all tasks |
 | `undo_group` | Reverse an entire multi-step sort atomically in correct reverse order |
 
-† Requires `THINGS_MCP_ALLOW_APPLESCRIPT=1`. Uses AppleScript because the Things URL scheme has no delete operation.
+† Requires `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`. Uses AppleScript because the Things URL scheme has no delete operation.
 
 †† Always requires explicit `confirm_action()` -- never auto-confirmed.
 
@@ -359,7 +378,7 @@ Most write tools use a two-phase pattern:
 
 Pending actions expire after 5 minutes.
 
-**Skipping the confirm round-trip:** set `THINGS_MCP_AUTO_CONFIRM=1` in the env block. `propose_*` tools will execute immediately and return a summary instead of a preview. The following operations always require an explicit `confirm_action()` regardless of this flag:
+**Skipping the confirm round-trip:** set `SAFE_THINGS_MCP_AUTO_CONFIRM=1` in the env block. `propose_*` tools will execute immediately and return a summary instead of a preview. The following operations always require an explicit `confirm_action()` regardless of this flag:
 
 - `propose_delete_project` — cascades to all tasks inside the project
 - `propose_bulk_complete`, `propose_bulk_cancel`, `propose_bulk_move`, `propose_bulk_update`
@@ -376,7 +395,7 @@ Pending actions expire after 5 minutes.
 
 Two **separate** prompt systems sit in front of the write tools. They are unrelated and have different fixes — most friction comes from not realising they are distinct:
 
-**1. Your MCP client's per-tool approval** — *"Allow Claude to use Propose add project?"*. This comes from the client (Claude Desktop, Claude Code, Cursor…), not from things-mcp. Every MCP tool is gated until you approve it.
+**1. Your MCP client's per-tool approval** — *"Allow Claude to use Propose add project?"*. This comes from the client (Claude Desktop, Claude Code, Cursor…), not from safe-things-mcp. Every MCP tool is gated until you approve it.
 
 - **Claude Code / Cursor / VS Code** — allow-list the whole server once. In Claude Code, add to `.claude/settings.json`:
   ```json
@@ -385,9 +404,9 @@ Two **separate** prompt systems sit in front of the write tools. They are unrela
   (replace `things` with the server name in your config). Or enable accept-all / auto-accept mode for the session.
 - **Claude Desktop** — click **Allow always** the first time each tool runs (one approval per tool, then it stops). Desktop has no wildcard allow-list today, so `AUTO_CONFIRM` below matters more here because it reduces the *number* of distinct tools the agent has to call.
 
-**2. things-mcp's own confirm step** — the `propose_*` → `confirm_action` round-trip. Set `THINGS_MCP_AUTO_CONFIRM=1` so `propose_*` tools execute immediately (see [Propose/confirm flow](#proposeconfirm-flow)). The genuinely destructive bulk/delete operations listed above still require an explicit `confirm_action()` regardless — that is the intended safety floor.
+**2. safe-things-mcp's own confirm step** — the `propose_*` → `confirm_action` round-trip. Set `SAFE_THINGS_MCP_AUTO_CONFIRM=1` so `propose_*` tools execute immediately (see [Propose/confirm flow](#proposeconfirm-flow)). The genuinely destructive bulk/delete operations listed above still require an explicit `confirm_action()` regardless — that is the intended safety floor.
 
-**For the smoothest experience, combine both:** allow-list the server (or turn on auto-accept) **and** set `THINGS_MCP_AUTO_CONFIRM=1`. You then run friction-free for everyday adds/updates/moves while keeping a hard confirmation on the dangerous bulk operations.
+**For the smoothest experience, combine both:** allow-list the server (or turn on auto-accept) **and** set `SAFE_THINGS_MCP_AUTO_CONFIRM=1`. You then run friction-free for everyday adds/updates/moves while keeping a hard confirmation on the dangerous bulk operations.
 
 > The recurring **"python … would like to access data from other apps"** dialog is a *third*, OS-level prompt — see [macOS permission prompts](#first-run-setup) above. Neither auto-accept nor `AUTO_CONFIRM` affects it; the fix is the signed bundle (Option B) or Full Disk Access.
 
@@ -395,9 +414,9 @@ Two **separate** prompt systems sit in front of the write tools. They are unrela
 
 ## AI Tagging
 
-things-mcp includes a tagging system designed for AI agents sorting large task lists. The core principle is **abstain-and-flag**: when the agent's confidence falls below roughly 90%, it applies a persistent flag tag rather than guessing at a destination. One ambiguous task never blocks the rest of the batch.
+safe-things-mcp includes a tagging system designed for AI agents sorting large task lists. The core principle is **abstain-and-flag**: when the agent's confidence falls below roughly 90%, it applies a persistent flag tag rather than guessing at a destination. One ambiguous task never blocks the rest of the batch.
 
-All AI tagging tools require `THINGS_MCP_ALLOW_APPLESCRIPT=1`. The first call triggers a one-time macOS Automation permission prompt -- click Allow once.
+All AI tagging tools require `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`. The first call triggers a one-time macOS Automation permission prompt -- click Allow once.
 
 ### How AI tags look in Things
 
@@ -500,7 +519,7 @@ undo_group(group_id="sort-xyz")
 
 ## Routines / scheduled workflows
 
-things-mcp is a stdio MCP server — it can't self-schedule. Routines are **user-run prompt recipes**: you send a prompt, the agent reads and sorts your tasks, you confirm, done. For unattended scheduling use OS-level tools (launchd, cron) or Claude Code's `/schedule` command to fire the same prompts automatically.
+safe-things-mcp is a stdio MCP server — it can't self-schedule. Routines are **user-run prompt recipes**: you send a prompt, the agent reads and sorts your tasks, you confirm, done. For unattended scheduling use OS-level tools (launchd, cron) or Claude Code's `/schedule` command to fire the same prompts automatically.
 
 **Example prompts to run as routines:**
 
@@ -517,14 +536,14 @@ Tip: after any routine finishes, you can undo the entire run with a single `undo
 | Variable | Default | Purpose |
 |---|---|---|
 | `THINGS_DB_PATH` | Things default | Override the read DB location |
-| `THINGS_MCP_STATE_DIR` | `~/.things-mcp` | Directory where `state.db` lives |
-| `THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for URL-scheme write confirmation |
+| `SAFE_THINGS_MCP_STATE_DIR` | `~/.safe-things-mcp` | Directory where `state.db` lives |
+| `SAFE_THINGS_MCP_CALLBACK_TIMEOUT` | `5` | Seconds to wait for URL-scheme write confirmation |
 | `THINGS_AUTH_TOKEN` | unset | Required for all mutating tools. Read tools and `add_inbox_todo` work without it. |
-| `THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable: delete to Trash, reorder todos, and all AI tagging operations. The first call triggers a one-time macOS Automation permission prompt. |
-| `THINGS_MCP_AI_TAG_PARENT` | `AI` | Name of the parent tag that groups all AI-created tags in the Things Tags window |
-| `THINGS_MCP_UNDO_MAX_ROWS` | `200` | Maximum number of undo entries to retain |
-| `THINGS_MCP_UNDO_MAX_AGE_DAYS` | `7` | Maximum age in days of undo entries. Pruning triggers when either limit is hit first. |
-| `THINGS_MCP_AUTO_CONFIRM` | unset | Set to `1` to skip the confirm round-trip for `propose_*` tools. Destructive and bulk operations always require explicit `confirm_action()` regardless. |
+| `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT` | unset | Set to `1` to enable: delete to Trash, reorder todos, and all AI tagging operations. The first call triggers a one-time macOS Automation permission prompt. |
+| `SAFE_THINGS_MCP_AI_TAG_PARENT` | `AI` | Name of the parent tag that groups all AI-created tags in the Things Tags window |
+| `SAFE_THINGS_MCP_UNDO_MAX_ROWS` | `200` | Maximum number of undo entries to retain |
+| `SAFE_THINGS_MCP_UNDO_MAX_AGE_DAYS` | `7` | Maximum age in days of undo entries. Pruning triggers when either limit is hit first. |
+| `SAFE_THINGS_MCP_AUTO_CONFIRM` | unset | Set to `1` to skip the confirm round-trip for `propose_*` tools. Destructive and bulk operations always require explicit `confirm_action()` regardless. |
 
 ---
 
@@ -537,12 +556,12 @@ Tip: after any routine finishes, you can undo the entire run with a single `undo
 
 **Writes** go through the Things URL scheme. An ephemeral aiohttp HTTP listener on `127.0.0.1` captures the `x-callback-url` response and the new task's UUID after each write.
 
-**State** is kept in a local SQLite database at `~/.things-mcp/state.db`. Three tables:
+**State** is kept in a local SQLite database at `~/.safe-things-mcp/state.db`. Three tables:
 - `pending_actions` -- proposed actions awaiting confirmation (expire after 5 minutes)
 - `undo_log` -- reversible action history with before/after state snapshots and `group_id` for atomic multi-step undo
 - `ai_tag_routing` -- maps AI routing tags to their proposed destination UUIDs and transient/persistent status
 
-**AppleScript** operations (delete to Trash, reorder, all AI tagging) are handled by `services/applescript.py`, which provides hardened string escaping, the `THINGS_MCP_ALLOW_APPLESCRIPT` gate, and an auth probe. The Things URL scheme has no delete or tag-create operations, so AppleScript is the only channel for these.
+**AppleScript** operations (delete to Trash, reorder, all AI tagging) are handled by `services/applescript.py`, which provides hardened string escaping, the `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT` gate, and an auth probe. The Things URL scheme has no delete or tag-create operations, so AppleScript is the only channel for these.
 
 **AI tag invariants** are enforced server-side: the asterisk wrapper (`*…*`) and parent-tag assignment are structural rules validated in the handler code, not relying on the agent to remember them. The agent is responsible for confidence judgments; the server is responsible for structural correctness.
 
@@ -561,6 +580,6 @@ V1 (read + Inbox-create) and V2 (full write parity) are complete, including AI-a
 - AI tagging with abstain-and-flag, routing workflow, group undo
 - Meta: health check, undo log
 
-**AppleScript-backed operations** (require `THINGS_MCP_ALLOW_APPLESCRIPT=1`): delete to Trash, reorder, and all AI tagging.
+**AppleScript-backed operations** (require `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`): delete to Trash, reorder, and all AI tagging.
 
-For implementation details, see `docs/things-mcp-V2-technical-architecture-and-implementation-plan.md`.
+For implementation details, see `docs/safe-things-mcp-V2-technical-architecture-and-implementation-plan.md`.

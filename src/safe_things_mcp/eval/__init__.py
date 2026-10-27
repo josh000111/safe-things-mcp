@@ -1,4 +1,4 @@
-"""Programmatic eval scoring for things-mcp test fixtures."""
+"""Programmatic eval scoring for safe-things-mcp test fixtures."""
 from __future__ import annotations
 
 from .scorer import TaskState, load_key, score

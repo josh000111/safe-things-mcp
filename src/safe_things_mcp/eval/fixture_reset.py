@@ -168,14 +168,14 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(0)
 
     # Dry-run: collect live state and print plan.
-    from things_mcp.eval.scorer import collect_live_states  # noqa: PLC0415
+    from safe_things_mcp.eval.scorer import collect_live_states  # noqa: PLC0415
 
     key = load_key(args.key)
     states = collect_live_states(key)
 
     # recent_undo: import live undo log.
     try:
-        from things_mcp.state import undo_log  # noqa: PLC0415
+        from safe_things_mcp.state import undo_log  # noqa: PLC0415
         recent_undo = undo_log.recent(limit=200)
     except Exception:
         recent_undo = []

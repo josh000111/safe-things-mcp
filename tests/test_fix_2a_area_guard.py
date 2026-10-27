@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from things_mcp.services import things_repo, url_scheme
-from things_mcp.services.handlers import add_project
+from safe_things_mcp.services import things_repo, url_scheme
+from safe_things_mcp.services.handlers import add_project
 
 
 pytestmark = pytest.mark.usefixtures("isolated_state_db")

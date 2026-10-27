@@ -44,7 +44,7 @@ _HELP_DOCS: dict = {
     },
     "propose_confirm_flow": (
         "propose_* tools stage an action for review; call confirm_action(action_id) to execute. "
-        "Set THINGS_MCP_AUTO_CONFIRM=1 to skip the confirm step for non-destructive operations."
+        "Set SAFE_THINGS_MCP_AUTO_CONFIRM=1 to skip the confirm step for non-destructive operations."
     ),
     "undo_usage": {
         "undo_single": "undo() reverses the most recent action; undo(undo_id=X) targets a specific entry.",
@@ -143,7 +143,7 @@ def register(mcp: FastMCP) -> None:
         """Idempotently create the AI parent tag and the 5 canonical flag tags.
 
         Creates the ``AI`` parent tag (controlled by
-        ``THINGS_MCP_AI_TAG_PARENT``) and the five persistent abstain tags —
+        ``SAFE_THINGS_MCP_AI_TAG_PARENT``) and the five persistent abstain tags —
         ``*Unclear*``, ``*Ambiguous Home*``, ``*Duplicate?*``,
         ``*No Time Signal*``, ``*Review Delete?*`` — if any are missing.
 
@@ -157,12 +157,12 @@ def register(mcp: FastMCP) -> None:
         - ``created``: list of tag names that were created
         - ``already_present``: list of tag names that already existed
 
-        Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+        Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
         """
         from .. import config as _config
         if not _config.ALLOW_APPLESCRIPT:
             raise RuntimeError(
-                "ensure_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+                "ensure_ai_tags requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
                 "Set the environment variable and restart the MCP server."
             )
 

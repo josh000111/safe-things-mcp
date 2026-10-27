@@ -6,7 +6,7 @@ single airlocked op with one ``undo_log`` row covering all N targets.
 Undo uses AppleScript ``move to do id X to list/project`` to restore each
 task from Trash to its original container.
 
-Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``. Always in
+Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``. Always in
 :data:`config.NEVER_BYPASS_KINDS`.
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ async def execute(payload: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "bulk_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "bulk_delete_todo requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -88,7 +88,7 @@ async def undo(undo_entry: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Cannot undo bulk_delete_todo without THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "Cannot undo bulk_delete_todo without SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
 
     before = undo_entry.get("before_state")

@@ -6,7 +6,7 @@ strips *Unclear* or other persistent abstain tags (transient=0).
 Call this AFTER bulk_move has confirmed the tasks landed in their new
 destinations.
 
-Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ async def execute(payload: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "cleanup_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "cleanup_ai_tags requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -137,7 +137,7 @@ async def undo(undo_entry: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Cannot undo cleanup_ai_tags without THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "Cannot undo cleanup_ai_tags without SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
 
     before_state = undo_entry.get("before_state") or {}

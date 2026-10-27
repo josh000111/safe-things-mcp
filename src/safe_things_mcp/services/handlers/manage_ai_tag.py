@@ -2,7 +2,7 @@
 
 Uses AppleScript ``set name of tag`` / ``set parent tag of tag``.
 
-Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ async def execute(payload: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "manage_ai_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "manage_ai_tag requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -125,7 +125,7 @@ async def undo(undo_entry: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Cannot undo manage_ai_tag without THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "Cannot undo manage_ai_tag without SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
 
     before_state = undo_entry.get("before_state") or {}

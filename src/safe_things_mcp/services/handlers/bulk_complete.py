@@ -10,7 +10,7 @@ Pattern (shared with every ``bulk_*`` handler in this directory):
   throughput; the user can re-query if they care.
 
 This kind is in :data:`config.NEVER_BYPASS_KINDS` — even with
-``THINGS_MCP_AUTO_CONFIRM=1`` an explicit ``confirm_action`` is required.
+``SAFE_THINGS_MCP_AUTO_CONFIRM=1`` an explicit ``confirm_action`` is required.
 
 Requires ``THINGS_AUTH_TOKEN``.
 """

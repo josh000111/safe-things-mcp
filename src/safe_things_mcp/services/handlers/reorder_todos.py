@@ -1,7 +1,7 @@
 """``reorder_todos`` handler — reorder to-dos in a list or project.
 
 Uses the private AppleScript command ``_private_experimental_ reorder to dos``.
-Requires THINGS_MCP_ALLOW_APPLESCRIPT=1.
+Requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1.
 
 For projects with native headings, dummy heading tasks are created at the
 original heading positions before reorder. Undo cannot reinstate native
@@ -48,7 +48,7 @@ def make_preview(payload: dict) -> str:
 async def execute(payload: dict) -> dict:
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "reorder_todos requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "reorder_todos requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -168,7 +168,7 @@ async def execute(payload: dict) -> dict:
 async def undo(undo_entry: dict) -> dict:
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "undo reorder_todos requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "undo reorder_todos requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
 
     before = undo_entry["before_state"]

@@ -1,5 +1,5 @@
 [project]
-name = "things-mcp"
+name = "safe-things-mcp"
 version = "0.1.0"
 description = "Local MCP server for Cultured Code's Things 3 on macOS"
 readme = "README.md"
@@ -13,16 +13,16 @@ dependencies = [
 ]
 
 [project.scripts]
-things-mcp = "things_mcp.server:main"
-things-mcp-score = "things_mcp.eval.scorer:main"
-things-mcp-fixture-reset = "things_mcp.eval.fixture_reset:main"
+safe-things-mcp = "safe_things_mcp.server:main"
+safe-things-mcp-score = "safe_things_mcp.eval.scorer:main"
+safe-things-mcp-fixture-reset = "safe_things_mcp.eval.fixture_reset:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/things_mcp"]
+packages = ["src/safe_things_mcp"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

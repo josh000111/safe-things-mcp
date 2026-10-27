@@ -1,6 +1,6 @@
 """Async osascript wrapper with hardened string escaping.
 
-Gated behind THINGS_MCP_ALLOW_APPLESCRIPT. Import-safe — importing this
+Gated behind SAFE_THINGS_MCP_ALLOW_APPLESCRIPT. Import-safe — importing this
 module never runs AppleScript. Call run_script() to execute.
 """
 from __future__ import annotations
@@ -39,13 +39,13 @@ async def run_script(script: str) -> str:
     """Run an AppleScript string via osascript, return stdout stripped.
 
     Raises RuntimeError if:
-    - THINGS_MCP_ALLOW_APPLESCRIPT is not set
+    - SAFE_THINGS_MCP_ALLOW_APPLESCRIPT is not set
     - osascript exits non-zero
     """
     from ..config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "AppleScript execution is disabled. Set THINGS_MCP_ALLOW_APPLESCRIPT=1 "
+            "AppleScript execution is disabled. Set SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1 "
             "to enable delete-to-Trash and other AppleScript-backed operations."
         )
 

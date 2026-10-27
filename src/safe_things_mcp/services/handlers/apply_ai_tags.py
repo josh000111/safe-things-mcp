@@ -3,7 +3,7 @@
 Uses a merge model: new tag set = existing tags ∪ add_tags. Never clobbers
 user tags. Undo restores the EXACT prior tag set.
 
-Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ async def execute(payload: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT, AI_TAG_PARENT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "apply_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "apply_ai_tags requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
 
@@ -190,7 +190,7 @@ async def undo(undo_entry: dict) -> dict:
     from ...config import ALLOW_APPLESCRIPT
     if not ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "Cannot undo apply_ai_tags without THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "Cannot undo apply_ai_tags without SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
 
     before_state = undo_entry.get("before_state") or {}

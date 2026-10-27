@@ -7,7 +7,7 @@ preview to the user, and on approval the agent calls
 
 ### Auto-confirm escape hatch
 
-When the env flag ``THINGS_MCP_AUTO_CONFIRM`` is set (see ``config.py``),
+When the env flag ``SAFE_THINGS_MCP_AUTO_CONFIRM`` is set (see ``config.py``),
 ``propose_*`` tools immediately execute their action in the same call
 and return the result inline. The preview is still emitted (so the LLM
 can summarise) but the user is spared a second round-trip.
@@ -86,7 +86,7 @@ async def propose_add_todo(
 
     Returns ``{action_id, preview, expires_at, auto_confirmed, ...}``.
     On approval the agent calls ``confirm_action(action_id)``; to drop
-    call ``cancel_action(action_id)``. When ``THINGS_MCP_AUTO_CONFIRM=1``
+    call ``cancel_action(action_id)``. When ``SAFE_THINGS_MCP_AUTO_CONFIRM=1``
     the action is executed immediately and ``auto_confirmed=True`` is
     set — the result lives in the ``result`` field.
     """
@@ -149,7 +149,7 @@ async def propose_move_todo(todo_id: str, target: str) -> dict:
 
     ``target`` is one of:
     * ``"inbox"`` — move to Inbox via AppleScript (requires
-      ``THINGS_MCP_ALLOW_APPLESCRIPT=1``). Undo restores the original
+      ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``). Undo restores the original
       scheduling; if the task was already in Inbox before the move it
       uses AppleScript to restore it there.
     * ``"today"`` / ``"anytime"`` / ``"someday"`` — change scheduling
@@ -179,9 +179,9 @@ async def propose_delete_todo(todo_id: str) -> dict:
     deleting it manually in the Things UI. Undo uses AppleScript to
     restore it from Trash. Things auto-empties Trash after 30 days.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 
-    Respects ``THINGS_MCP_AUTO_CONFIRM=1`` — single-item deletes go to
+    Respects ``SAFE_THINGS_MCP_AUTO_CONFIRM=1`` — single-item deletes go to
     Trash (reversible via ``undo()``), so confirmation is not forced
     when the user has explicitly named the item. Use
     ``propose_bulk_delete_todo`` for multi-target deletes, which always
@@ -189,7 +189,7 @@ async def propose_delete_todo(todo_id: str) -> dict:
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "propose_delete_todo requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
     payload_model = ProposeDeleteTodoInput(todo_id=todo_id)
@@ -309,7 +309,7 @@ async def propose_bulk_complete(todo_ids: list[str]) -> dict:
     """Propose completing N to-dos in one airlocked op.
 
     **Never auto-confirmed** — explicit ``confirm_action`` required even
-    when ``THINGS_MCP_AUTO_CONFIRM=1``. Requires ``THINGS_AUTH_TOKEN``.
+    when ``SAFE_THINGS_MCP_AUTO_CONFIRM=1``. Requires ``THINGS_AUTH_TOKEN``.
     """
     payload_model = ProposeBulkCompleteInput(todo_ids=todo_ids)
     payload = payload_model.model_dump()
@@ -345,7 +345,7 @@ async def propose_bulk_move(
 
     ``target`` follows the same rules as :func:`propose_move_todo`:
     * ``"inbox"`` — move to Inbox via AppleScript (requires
-      ``THINGS_MCP_ALLOW_APPLESCRIPT=1``).
+      ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``).
     * ``"today"`` / ``"anytime"`` / ``"someday"`` — scheduling move.
     * A project/area UUID — membership move.
 
@@ -429,13 +429,13 @@ async def propose_bulk_delete_todo(
     mutation — if one is missing or already in Trash, the whole batch aborts.
     Undo restores each task from Trash to its original list or project.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 
     **Never auto-confirmed** — explicit ``confirm_action`` always required.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_bulk_delete_todo requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "propose_bulk_delete_todo requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
     payload_model = ProposeBulkDeleteInput(todo_ids=todo_ids, group_id=group_id)
@@ -549,13 +549,13 @@ async def propose_delete_project(project_id: str) -> dict:
     Uses AppleScript to move the project (and all its tasks) to Things Trash.
     Undo restores the project to Anytime (area membership not restored).
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 
     **Never auto-confirmed.**
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_delete_project requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "propose_delete_project requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
     payload_model = ProposeDeleteProjectInput(project_id=project_id)
@@ -712,7 +712,7 @@ async def propose_reorder_todos(
                is rejected to keep pre-existing tasks pinned at the top.
                Pass True to override this guard.
 
-    Requires THINGS_MCP_ALLOW_APPLESCRIPT=1.
+    Requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1.
 
     Projects with native headings: native headings are auto-converted to
     dummy heading tasks at their original positions before reorder. The
@@ -806,11 +806,11 @@ async def propose_move_under_ai_heading(
     ``propose_bulk_move`` to keep the undo group linked for ``undo_group``.
 
     **Never auto-confirmed.** Requires ``THINGS_AUTH_TOKEN`` and
-    ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_move_under_ai_heading requires THINGS_MCP_ALLOW_APPLESCRIPT=1. "
+            "propose_move_under_ai_heading requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1. "
             "Set the environment variable and restart the MCP server."
         )
     if group_id is None:
@@ -844,11 +844,11 @@ async def propose_create_ai_tag(name: str, parent: str = "AI") -> dict:
 
     Idempotent: if the tag already exists, this is a no-op success.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_create_ai_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "propose_create_ai_tag requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
     payload_model = ProposeCreateAiTagInput(name=name, parent=parent)
     payload = payload_model.model_dump()
@@ -875,11 +875,11 @@ async def propose_create_tag(name: str, parent: str | None = None) -> dict:
 
     Idempotent: if the tag already exists, this is a no-op success.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_create_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "propose_create_tag requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
     payload_model = ProposeCreateTagInput(name=name, parent=parent)
     payload = payload_model.model_dump()
@@ -902,11 +902,11 @@ async def propose_manage_ai_tag(
     Naming convention: ≤2–3 words, Title Case, asterisk-wrapped.
     Parent is normally ``AI``; only change if intentional.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_manage_ai_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "propose_manage_ai_tag requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
     payload_model = ProposeManageAiTagInput(
         name=name, new_name=new_name, new_parent=new_parent
@@ -930,13 +930,13 @@ async def propose_delete_ai_tag(name: str) -> dict:
     only to permanently remove a tag from the entire system.
 
     This is a NEVER_BYPASS kind — explicit ``confirm_action()`` required
-    even with ``THINGS_MCP_AUTO_CONFIRM=1``.
+    even with ``SAFE_THINGS_MCP_AUTO_CONFIRM=1``.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_delete_ai_tag requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "propose_delete_ai_tag requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
     payload_model = ProposeDeleteAiTagInput(name=name)
     payload = payload_model.model_dump()
@@ -993,11 +993,11 @@ async def propose_apply_ai_tags(
     ``undo_group(group_id)`` can reverse the whole sort atomically.
     Surface the ``group_id`` to the user so they can undo in one command.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_apply_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "propose_apply_ai_tags requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
     # apply_ai_tags is the sort anchor: open a session so every later sort tool
     # inherits this group_id even if the agent never threads one through. A
@@ -1031,11 +1031,11 @@ async def propose_cleanup_ai_tags(
     reverse the entire sort (cleanup → move → tag-apply) in correct LIFO
     order.
 
-    Requires ``THINGS_MCP_ALLOW_APPLESCRIPT=1``.
+    Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
     """
     if not config.ALLOW_APPLESCRIPT:
         raise RuntimeError(
-            "propose_cleanup_ai_tags requires THINGS_MCP_ALLOW_APPLESCRIPT=1."
+            "propose_cleanup_ai_tags requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
     if group_id is None:
         group_id = sort_session.active()
@@ -1096,7 +1096,7 @@ async def _enqueue_and_maybe_auto_confirm(
         "auto_confirmed": True,
         "result": result,
         "next_step": (
-            "Auto-confirmed via THINGS_MCP_AUTO_CONFIRM. Action executed; "
+            "Auto-confirmed via SAFE_THINGS_MCP_AUTO_CONFIRM. Action executed; "
             "use undo() to reverse if needed."
         ),
     }
