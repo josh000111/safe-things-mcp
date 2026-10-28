@@ -192,6 +192,13 @@ This is currently the only one-click install path among supported clients -- Cur
 
 </details>
 
+<details>
+<summary><strong>Always-on agent apps (Claude Duet, ChatGPT Dots, Meta Muse, xAI Grok Bot) -- not supported</strong></summary>
+
+These run on their own remote cloud VM, not on your Mac, and none of them currently supports attaching a local stdio MCP server -- the only bridge any of them documents to your own machine is GUI/computer-use screen automation, not the MCP protocol safe-things-mcp uses. OpenAI states this explicitly for Dots ("Can I connect to a local MCP server? Not directly."); Anthropic scopes local MCP/plugin support to Claude Desktop (Chat tab), Claude Code, and Cowork sessions run on your own machine -- Duet isn't in that list. "Your connectors carry over" claims for these products cover remote/cloud connectors already on your account, not local servers like this one. Use Options A/B/C above instead.
+
+</details>
+
 ---
 
 ## Client config
