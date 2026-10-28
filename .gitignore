@@ -21,3 +21,8 @@ build_tools/pyi_work/
 build_tools/*.pem
 build_tools/*.p12
 build_tools/*.spec
+
+# MCPB (.mcpb) build artifacts -- release artifacts, not source
+build_tools/mcpb_staging/
+dist_mcpb/
+*.mcpb

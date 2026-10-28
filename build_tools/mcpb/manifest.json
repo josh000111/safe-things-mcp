@@ -1,0 +1,51 @@
+{
+  "manifest_version": "0.3",
+  "name": "safe-things-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP server for Things 3 on macOS: full reads plus Inbox-only writes via the Things URL scheme, with a propose/confirm safety layer and undo.",
+  "author": {
+    "name": "josh000111"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/josh000111/safe-things-mcp"
+  },
+  "homepage": "https://github.com/josh000111/safe-things-mcp",
+  "license": "MIT",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/safe-things-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/safe-things-mcp",
+      "args": [],
+      "env": {
+        "THINGS_AUTH_TOKEN": "${user_config.things_auth_token}",
+        "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT": "${user_config.allow_applescript}",
+        "SAFE_THINGS_MCP_AUTO_CONFIRM": "${user_config.auto_confirm}"
+      }
+    }
+  },
+  "user_config": {
+    "things_auth_token": {
+      "type": "string",
+      "title": "Things Authorization Token",
+      "description": "Get this from Things -> Settings -> General -> Manage. Required for any mutating tool.",
+      "required": true,
+      "sensitive": true
+    },
+    "allow_applescript": {
+      "type": "boolean",
+      "title": "Allow AppleScript operations",
+      "description": "Enables delete-to-Trash, reorder, and AI tagging via AppleScript. Triggers a one-time macOS automation permission prompt.",
+      "required": false,
+      "default": false
+    },
+    "auto_confirm": {
+      "type": "boolean",
+      "title": "Auto-confirm proposed writes",
+      "description": "Skips the confirm step for propose_* tools. Destructive and bulk operations always require explicit confirmation regardless of this setting.",
+      "required": false,
+      "default": false
+    }
+  }
+}

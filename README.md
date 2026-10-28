@@ -181,6 +181,17 @@ Then point your client's `command` at the printed path (`dist_signed/safe-things
 
 **Rule of thumb:** primarily on Claude Desktop and want effortless updates -- Option A (the prompt recurs either way there, so you give up little). On Cursor, VS Code, or Claude Code and want the prompt to stop -- Option B.
 
+<details>
+<summary><strong>Option C -- Claude Desktop Extension (.mcpb)</strong></summary>
+
+Run `./build_tools/build_mcpb.sh`, then install the resulting `dist_mcpb/safe-things-mcp.mcpb` via Claude Desktop > Settings > Extensions (drag the file in), pasting your Things auth token into the install form.
+
+This is currently the only one-click install path among supported clients -- Cursor, VS Code, Codex, and the Claude Code CLI still need the manual JSON config documented below.
+
+**It does not route around the Claude Desktop `disclaimer`-wrapper bug described above.** The bundle still ships the same signed binary as Option B, launched by the same Desktop helper process -- expect the same recurring prompt, or the silent `unable to open database file` failure on affected builds. See the "macOS permission prompts" section above before assuming `.mcpb` fixes permissions by itself.
+
+</details>
+
 ---
 
 ## Client config
