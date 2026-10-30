@@ -155,10 +155,10 @@ def register(mcp: FastMCP) -> None:
         # Build a uuid→parent_uuid map directly from TMTag (things.py's flat list
         # omits the parent field, so we query SQLite ourselves, read-only).
         import sqlite3 as _sqlite3
-        from ..config import THINGS_DB_PATH as _DB_PATH
+        from ..config import resolve_things_db_path
         _child_uuids: set[str] = set()
         try:
-            with _sqlite3.connect(f"file:{_DB_PATH}?mode=ro", uri=True) as _conn:
+            with _sqlite3.connect(f"file:{resolve_things_db_path()}?mode=ro", uri=True) as _conn:
                 _rows = _conn.execute(
                     "SELECT child.uuid FROM TMTag child "
                     "JOIN TMTag parent ON child.parent = parent.uuid "

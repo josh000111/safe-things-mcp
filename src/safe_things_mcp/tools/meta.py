@@ -13,7 +13,7 @@ from ..config import (
     ALLOW_APPLESCRIPT,
     STATE_DB_PATH,
     THINGS_AUTH_TOKEN,
-    THINGS_DB_PATH,
+    resolve_things_db_path,
 )
 from ..models import HealthReport
 from ..services import things_repo
@@ -119,9 +119,10 @@ def register(mcp: FastMCP) -> None:
         if ALLOW_APPLESCRIPT:
             reorder_available = _reorder_command_available()
 
+        db_path = resolve_things_db_path()
         return HealthReport(
-            things_db_path=str(THINGS_DB_PATH),
-            things_db_exists=THINGS_DB_PATH.exists(),
+            things_db_path=str(db_path),
+            things_db_exists=db_path.exists(),
             things_app_running=_things_app_running(),
             things_py_version=_things_py_version(),
             state_db_path=str(STATE_DB_PATH),

@@ -9,13 +9,11 @@ from typing import Any
 
 import things
 
-from ..config import THINGS_DB_PATH
-
-_DB = str(THINGS_DB_PATH)
+from ..config import resolve_things_db_path
 
 
 def _kw(**extra: Any) -> dict[str, Any]:
-    kw: dict[str, Any] = {"filepath": _DB}
+    kw: dict[str, Any] = {"filepath": str(resolve_things_db_path())}
     kw.update({k: v for k, v in extra.items() if v is not None})
     return kw
 

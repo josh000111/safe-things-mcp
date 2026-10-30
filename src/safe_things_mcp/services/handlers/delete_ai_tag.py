@@ -191,9 +191,8 @@ async def undo(undo_entry: dict) -> dict:
 def _find_tasks_with_tag(tag_name: str) -> list[dict]:
     """Return all tasks carrying this tag, with their full tag sets."""
     # Use things_repo.tags(include_items=True) to find tasks
-    import things
     try:
-        tags_with_items = things.tags(include_items=True)
+        tags_with_items = things_repo.tags(include_items=True)
         for tag in tags_with_items:
             if tag.get("title") == tag_name:
                 items = tag.get("items") or []

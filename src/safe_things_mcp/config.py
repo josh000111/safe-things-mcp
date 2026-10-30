@@ -1,17 +1,32 @@
 """Runtime configuration: paths, env, Things DB resolution."""
 from __future__ import annotations
 
+import glob
 import os
 from pathlib import Path
-
-import things
 
 STATE_DIR = Path(os.environ.get("SAFE_THINGS_MCP_STATE_DIR", Path.home() / ".safe-things-mcp"))
 STATE_DB_PATH = STATE_DIR / "state.db"
 
-THINGS_DB_PATH = Path(
-    os.environ.get("THINGS_DB_PATH", things.database.DEFAULT_FILEPATH)
+THINGS_DB_GLOB = (
+    "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/"
+    "ThingsData-*/Things Database.thingsdatabase/main.sqlite"
 )
+THINGS_DB_LEGACY_PATH = Path(
+    "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/"
+    "Things Database.thingsdatabase/main.sqlite"
+).expanduser()
+
+
+def resolve_things_db_path() -> Path:
+    # Resolved per call, not at import: a transient macOS permission denial at
+    # startup would otherwise pin a dead fallback path for the process lifetime.
+    override = os.environ.get("THINGS_DB_PATH")
+    if override:
+        return Path(override)
+    match = next(glob.iglob(os.path.expanduser(THINGS_DB_GLOB)), None)
+    return Path(match) if match else THINGS_DB_LEGACY_PATH
+
 
 THINGS_AUTH_TOKEN = os.environ.get("THINGS_AUTH_TOKEN")
 
