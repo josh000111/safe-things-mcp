@@ -160,7 +160,27 @@ def build_server() -> FastMCP:
     return mcp
 
 
+_USAGE = """usage: safe-things-mcp [--help | --version]
+
+Local MCP server for Things 3 on macOS. Speaks MCP over stdin/stdout, so it is
+meant to be launched by an MCP client (Claude Desktop, Claude Code, Cursor, ...),
+not run by hand. Setup: https://github.com/josh000111/safe-things-mcp#install
+"""
+
+
 def main() -> None:
+    # Handle the two flags by hand: without this the server starts and waits on
+    # stdin, which looks like a hang to anyone trying `--help` in a terminal.
+    import sys
+
+    from . import __version__
+
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(_USAGE, end="")
+        return
+    if "--version" in sys.argv[1:]:
+        print(f"safe-things-mcp {__version__}")
+        return
     build_server().run()
 
 
