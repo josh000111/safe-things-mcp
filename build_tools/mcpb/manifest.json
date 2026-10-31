@@ -46,7 +46,7 @@
     "auto_confirm": {
       "type": "boolean",
       "title": "Auto-confirm proposed writes",
-      "description": "Skips the confirm step for propose_* tools. Destructive and bulk operations always require explicit confirmation regardless of this setting.",
+      "description": "When on, this setting skips the confirm step for propose_* tools. You will not be asked to confirm the proposed actions the Agent is about to take in Things, before the Agent takes them. Destructive and bulk actions always require explicit confirmation regardless of this setting.",
       "required": false,
       "default": false
     }
