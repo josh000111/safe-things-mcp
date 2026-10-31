@@ -12,20 +12,37 @@ from __future__ import annotations
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
 from ...state import undo_log
 from .dummy_heading import is_dummy_heading
 from .delete_heading import _resolve_heading_uuid
+from .update_heading import resolve_pinned_heading_uuid
 
 KIND = "bulk_delete_heading"
 
 
 def make_preview(payload: dict) -> str:
-    project_id = payload.get("project_id", "")
-    n = len(payload.get("heading_ids_or_names") or [])
-    return (
+    project = pn.fmt(payload.get("project_id", ""), payload, "project_title")
+    # Two refs (e.g. a name and its uuid) can resolve to one heading; execute acts
+    # once per heading, so count and list distinct headings only.
+    distinct: dict[str, dict] = {}
+    for it in payload.get("heading_items") or []:
+        distinct.setdefault(it.get("uuid") or f"ref:{it.get('ref')}", it)
+    if distinct:
+        n = len(distinct)
+    else:  # legacy payload staged without resolved items
+        n = len(set(payload.get("heading_ids_or_names") or []))
+    header = (
         f"Soft-delete {n} dummy heading{'s' if n != 1 else ''} from project "
-        f"{project_id} (mark canceled+completed → Logbook; restorable via undo)"
+        f"{project} (mark canceled+completed → Logbook; restorable via undo)"
     )
+    labels = []
+    for it in distinct.values():
+        if it.get("title"):
+            labels.append(f"'{it['title']}' ({it.get('uuid') or it.get('ref')})")
+        else:
+            labels.append(f"{it.get('ref')} (not found)")
+    return header + pn.item_lines(labels)
 
 
 async def execute(payload: dict) -> dict:
@@ -44,9 +61,20 @@ async def execute(payload: dict) -> dict:
         )
 
     # Resolve and validate all headings before any mutation.
+    # UUIDs pinned at propose time (aligned 1:1 with the refs) win over name
+    # resolution so confirm acts on exactly what the preview showed.
+    pinned_items = payload.get("heading_items") or []
     items: list[dict] = []
-    for ref in heading_ids_or_names:
-        uuid = _resolve_heading_uuid(project_id, ref)
+    seen: set[str] = set()
+    for i, ref in enumerate(heading_ids_or_names):
+        pin = pinned_items[i] if i < len(pinned_items) else None
+        if pin and pin.get("ref") == ref and pin.get("uuid"):
+            uuid = resolve_pinned_heading_uuid(project_id, pin["uuid"], "deleted")
+        else:
+            uuid = _resolve_heading_uuid(project_id, ref)
+        if uuid in seen:
+            continue  # two refs to the same heading: act once
+        seen.add(uuid)
         row = things_repo.get_todo(uuid)
         if row is None:
             raise ValueError(

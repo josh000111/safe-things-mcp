@@ -12,17 +12,20 @@ Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``. Always in
 from __future__ import annotations
 
 from .. import things_repo, applescript
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "bulk_delete_todo"
 
 
 def make_preview(payload: dict) -> str:
-    n = len(payload.get("todo_ids") or [])
+    ids = payload.get("todo_ids") or []
+    n = len(ids)
     return (
         f"Bulk delete {n} to-do{'s' if n != 1 else ''} — moves to Things Trash. "
         "Undo restores all. Trash auto-empties after 30 days."
-    )
+    ) + pn.todo_lines(ids, payload)
 
 
 async def execute(payload: dict) -> dict:
@@ -39,8 +42,11 @@ async def execute(payload: dict) -> dict:
     group_id = payload.get("group_id")
 
     items: list[dict] = []
+    # Refuse the whole batch (naming every project/heading/area id) before any
+    # mutation or undo_log write.
+    rows = ref_checks.check_todos(todo_ids, things_repo.get_todo)
     for uid in todo_ids:
-        row = things_repo.get_todo(uid)
+        row = rows.get(uid)
         if row is None:
             raise ValueError(
                 f"No to-do found with id={uid!r}. Bulk delete aborts before "

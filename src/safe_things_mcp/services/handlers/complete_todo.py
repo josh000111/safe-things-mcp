@@ -18,6 +18,8 @@ import asyncio
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "complete_todo"
@@ -26,8 +28,7 @@ KIND = "complete_todo"
 def make_preview(payload: dict) -> str:
     """One-line summary. Reused by ``propose_bulk_complete`` if the bulk
     variant ever goes through the airlock."""
-    todo_id = payload["todo_id"]
-    return f"Mark to-do {todo_id} as completed"
+    return f"Mark to-do {pn.fmt(payload['todo_id'], payload, 'todo_title')} as completed"
 
 
 async def execute(payload: dict) -> dict:
@@ -58,6 +59,8 @@ async def execute(payload: dict) -> dict:
             f"No to-do found with id={todo_id!r}. It may have been deleted or "
             "the id may be wrong. Use list/search tools to find the right id."
         )
+    # Refuse project/heading/area ids: acting on them would hit the whole container.
+    ref_checks.require_todo(todo_id, before_state)
 
     entry_id = undo_log.record(
         action_kind=KIND,

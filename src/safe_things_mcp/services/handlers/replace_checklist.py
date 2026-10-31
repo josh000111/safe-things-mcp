@@ -11,15 +11,26 @@ import asyncio
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "replace_checklist"
 
 
 def make_preview(payload: dict) -> str:
-    todo_id = payload["todo_id"]
     items = payload.get("items", [])
-    return f"Replace checklist of to-do {todo_id} with {len(items)} item(s)"
+    todo = pn.fmt(payload["todo_id"], payload, "todo_title")
+    out = (
+        f"Replace checklist of to-do {todo} with {len(items)} item(s)"
+        + pn.item_lines([f"'{i}'" for i in items])
+    )
+    existing = payload.get("existing_checklist") or []
+    if existing:
+        out += f"\n  Existing {len(existing)} item(s) that will be removed:" + pn.item_lines(
+            [f"'{i}'" for i in existing], indent="    "
+        )
+    return out
 
 
 async def execute(payload: dict) -> dict:
@@ -40,6 +51,8 @@ async def execute(payload: dict) -> dict:
             f"No to-do found with id={todo_id!r}. It may have been deleted or "
             "the id may be wrong. Use list/search tools to find the right id."
         )
+    # Refuse project/heading/area ids: acting on them would hit the whole container.
+    ref_checks.require_todo(todo_id, todo)
 
     before_items = things_repo.get_checklist_items(todo_id)
     entry_id = undo_log.record(

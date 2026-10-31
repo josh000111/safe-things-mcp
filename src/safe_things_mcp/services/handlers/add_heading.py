@@ -18,6 +18,8 @@ import time
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 from .dummy_heading import make_dummy_title, is_dummy_heading
 
@@ -35,20 +37,28 @@ def make_preview(payload: dict) -> str:
     name = payload.get("name", "")
     project_id = payload.get("project_id", "")
     dummy_title = make_dummy_title(name)  # raises ValueError for invalid names
-    if things_repo.project(project_id) is None:
+    proj = ref_checks.check_project(project_id)  # raises on a to-do/heading id
+    if proj is None:
         raise ValueError(
             f"Project {project_id!r} not found. "
             "Use list/search tools to find the correct project UUID."
         )
     parts = [
-        f"Add dummy heading {dummy_title!r} to project {project_id}",
+        f"Add dummy heading {dummy_title!r} to project "
+        f"{_project_label(project_id, proj)}",
         "(URL-scheme only — position not guaranteed)",
     ]
     if payload.get("after_todo_id"):
         parts.append(
-            f"[after_todo_id={payload['after_todo_id']!r} hint acknowledged but not honoured]"
+            f"[after_todo_id={pn.fmt(payload['after_todo_id'], payload, 'after_todo_title')} "
+            "hint acknowledged but not honoured]"
         )
     return " ".join(parts)
+
+
+def _project_label(project_id: str, proj: dict) -> str:
+    title = proj.get("title")
+    return f"'{title}' ({project_id})" if title else project_id
 
 
 async def execute(payload: dict) -> dict:
@@ -66,7 +76,7 @@ async def execute(payload: dict) -> dict:
     after_todo_id = payload.get("after_todo_id")
     group_id = payload.get("group_id")
 
-    proj = things_repo.project(project_id)
+    proj = ref_checks.check_project(project_id)  # raises on a to-do/heading id
     if proj is None:
         raise ValueError(
             f"Project {project_id!r} not found. "

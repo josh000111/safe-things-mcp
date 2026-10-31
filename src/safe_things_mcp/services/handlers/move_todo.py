@@ -30,6 +30,8 @@ from typing import Any
 
 from ... import config
 from .. import applescript, things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "move_todo"
@@ -40,7 +42,8 @@ _REJECT_KEYWORDS = {"upcoming", "logbook", "trash"}
 
 
 def make_preview(payload: dict) -> str:
-    return f"Move to-do {payload['todo_id']} to {payload['target']!r}"
+    todo = pn.fmt(payload["todo_id"], payload, "todo_title")
+    return f"Move to-do {todo} to {pn.fmt_destination(payload['target'], payload)}"
 
 
 async def execute(payload: dict) -> dict:
@@ -77,6 +80,8 @@ async def execute(payload: dict) -> dict:
             f"No to-do found with id={todo_id!r}. It may have been deleted "
             "or the id may be wrong."
         )
+    # Refuse project/heading/area ids: acting on them would hit the whole container.
+    ref_checks.require_todo(todo_id, before)
 
     # Decide which dimension we're moving along, and capture the inverse
     # params that will put the task back where it was.

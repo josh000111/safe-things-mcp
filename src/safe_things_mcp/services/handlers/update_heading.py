@@ -4,8 +4,11 @@ Only dummy headings (``__NAME__`` format) can be renamed here. Native
 headings require AppleScript (step 5).
 
 Resolution logic:
-- If ``heading_id_or_name`` looks like a Things UUID, resolve it directly
-  and verify it is a dummy heading.
+- If ``heading_id_or_name`` is a Things UUID, resolve it directly and verify
+  it is a dummy heading that belongs to ``project_id`` (a UUID from another
+  project is refused).
+- A propose-time payload also pins ``heading_uuid``; execute then acts on
+  exactly that UUID (re-verified), never re-resolving by name.
 - Otherwise treat it as a heading name, scan the project items for
   matching dummy headings (and native headings for ambiguity detection).
 - If ambiguous (multiple matches across dummy and/or native), raise
@@ -19,6 +22,8 @@ import asyncio
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 from .dummy_heading import make_dummy_title, is_dummy_heading, extract_name_from_dummy
 
@@ -32,9 +37,10 @@ def make_preview(payload: dict) -> str:
         new_dummy = make_dummy_title(new_name)
     except ValueError:
         new_dummy = f"__{new_name.upper()}__"
+    project = pn.fmt(payload.get("project_id", ""), payload, "project_title")
     return (
-        f"Rename heading {heading_ref!r} to {new_dummy!r} "
-        f"in project {payload.get('project_id', '')}"
+        f"Rename heading {pn.fmt_heading(heading_ref, payload)} to {new_dummy!r} "
+        f"in project {project}"
     )
 
 
@@ -64,8 +70,11 @@ async def execute(payload: dict) -> dict:
 
     new_dummy_title = make_dummy_title(new_name)
 
-    # Resolve the heading UUID.
-    heading_uuid = _resolve_heading_uuid(project_id, heading_id_or_name)
+    # Resolve the heading UUID. A UUID pinned at propose time wins over the
+    # name, so confirm acts on exactly what the preview showed.
+    heading_uuid = resolve_pinned_or_ref(
+        payload, project_id, heading_id_or_name, "renamed", _resolve_heading_uuid
+    )
 
     before = things_repo.get_todo(heading_uuid)
     if before is None:
@@ -156,22 +165,65 @@ async def undo(undo_entry: dict) -> dict:
 # ---------- internals ----------
 
 
+def verify_heading_row(project_id: str, ref: str, row: dict, verb: str) -> None:
+    """Raise unless ``row`` is a dummy heading that belongs to ``project_id``.
+
+    Fixes the cross-project hole where any heading UUID was accepted without
+    checking which project it lived in. Membership: the row's own ``project``,
+    or (for a to-do nested under a native heading) that heading's project.
+    """
+    title = row.get("title", "")
+    if row.get("type") not in (None, "to-do") or not is_dummy_heading(title):
+        raise ValueError(
+            f"Task {ref!r} (title={title!r}, type={row.get('type')!r}) is not a "
+            f"dummy heading. Only dummy headings (__NAME__ format) can be "
+            f"{verb} here. Native headings require AppleScript (step 5)."
+        )
+    owner = row.get("project")
+    if owner is None and row.get("heading"):
+        parent = things_repo.get_todo(row["heading"])
+        owner = (parent or {}).get("project")
+    if owner != project_id:
+        raise ValueError(
+            f"Heading {ref!r} (title={title!r}) does not belong to project "
+            f"{project_id!r} (it is in project {owner!r}). Refusing to act on a "
+            "heading outside the given project."
+        )
+
+
+def resolve_pinned_or_ref(payload: dict, project_id: str, ref: str, verb: str, fallback) -> str:
+    """UUID execute must act on: the propose-time pinned ``heading_uuid`` if
+    present (re-checked to still exist and still belong to the project), else
+    the legacy name/UUID resolution (``fallback``) for payloads staged before
+    pinning."""
+    pinned = payload.get("heading_uuid")
+    if not pinned:
+        return fallback(project_id, ref)
+    return resolve_pinned_heading_uuid(project_id, pinned, verb)
+
+
+def resolve_pinned_heading_uuid(project_id: str, pinned: str, verb: str) -> str:
+    row = things_repo.get_todo(pinned)
+    if row is None:
+        raise ValueError(
+            f"Heading {pinned!r} (pinned when this action was proposed) no longer "
+            "exists. Re-propose the action."
+        )
+    verify_heading_row(project_id, pinned, row, verb)
+    return pinned
+
+
 def _resolve_heading_uuid(project_id: str, heading_id_or_name: str) -> str:
     """Return the UUID of the dummy heading task.
 
-    If heading_id_or_name resolves directly via get_todo, use it.
-    Otherwise scan the project items by name.
+    If heading_id_or_name resolves directly via get_todo, use it (after
+    checking it is a dummy heading IN ``project_id``). Otherwise scan the
+    project items by name.
     """
     # Try direct UUID lookup first.
     row = things_repo.get_todo(heading_id_or_name)
     if row is not None:
-        # It's a valid UUID reference — validate it's a dummy heading.
-        if not is_dummy_heading(row.get("title", "")):
-            raise ValueError(
-                f"Task {heading_id_or_name!r} (title={row.get('title')!r}) is not a "
-                "dummy heading. Only dummy headings (__NAME__ format) can be "
-                "renamed with update_heading."
-            )
+        verify_heading_row(project_id, heading_id_or_name, row, "renamed")
         return heading_id_or_name
 
     # Treat as a name — scan project items.
@@ -206,7 +258,7 @@ def _find_dummy_heading_in_project(project_id: str, name: str) -> list[dict]:
     same name, to enable ambiguity detection.
     Returns list of {"uuid": ..., "title": ..., "kind": "dummy"|"native"}.
     """
-    proj = things_repo.project(project_id)
+    proj = ref_checks.check_project(project_id)
     if proj is None:
         raise ValueError(f"Project {project_id!r} not found.")
 

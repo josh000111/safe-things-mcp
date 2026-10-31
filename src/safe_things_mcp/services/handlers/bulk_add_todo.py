@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
 from ...state import undo_log
 
 KIND = "bulk_add_todo"
@@ -31,11 +32,12 @@ _TOP_INSERTING_LISTS = {"inbox", "today"}
 
 def make_preview(payload: dict) -> str:
     items = payload.get("items") or []
-    list_id = payload.get("list_id") or "inbox"
     n = len(items)
-    titles = ", ".join(repr(it.get("title", "?")) for it in items[:3])
-    suffix = f" … (+{n - 3} more)" if n > 3 else ""
-    return f"Bulk add {n} to-do{'s' if n != 1 else ''} to {list_id}: {titles}{suffix}"
+    dest = pn.fmt_destination(payload.get("list_id") or "inbox", payload, quote_keyword=False)
+    titles = [f"'{it.get('title', '?')}'" for it in items]
+    return (
+        f"Bulk add {n} to-do{'s' if n != 1 else ''} to {dest}" + pn.item_lines(titles)
+    )
 
 
 async def execute(payload: dict) -> dict:

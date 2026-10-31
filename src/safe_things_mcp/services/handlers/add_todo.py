@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
 from ...state import undo_log
 
 KIND = "add_todo"
@@ -29,7 +30,8 @@ def make_preview(payload: dict) -> str:
     """One-line summary for the agent to surface to the user."""
     title = payload["title"]
     list_id = payload.get("list_id") or "inbox"
-    bits = [f"Add to-do {title!r} to {list_id}"]
+    dest = pn.fmt_destination(list_id, payload, quote_keyword=False)
+    bits = [f"Add to-do {title!r} to {dest}"]
     if payload.get("when"):
         bits.append(f"when={payload['when']}")
     if payload.get("deadline"):

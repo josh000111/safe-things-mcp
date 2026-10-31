@@ -18,19 +18,24 @@ import asyncio
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
 from ...state import undo_log
 from .dummy_heading import is_dummy_heading, extract_name_from_dummy
-from .update_heading import _find_dummy_heading_in_project
+from .update_heading import (
+    _find_dummy_heading_in_project,
+    resolve_pinned_or_ref,
+    verify_heading_row,
+)
 
 KIND = "delete_heading"
 
 
 def make_preview(payload: dict) -> str:
     heading_ref = payload.get("heading_id_or_name", "")
-    project_id = payload.get("project_id", "")
+    project = pn.fmt(payload.get("project_id", ""), payload, "project_title")
     return (
-        f"Soft-delete dummy heading {heading_ref!r} from project {project_id} "
-        "(mark canceled+completed → moves to Logbook; restorable via undo)"
+        f"Soft-delete dummy heading {pn.fmt_heading(heading_ref, payload)} from project "
+        f"{project} (mark canceled+completed → moves to Logbook; restorable via undo)"
     )
 
 
@@ -57,7 +62,11 @@ async def execute(payload: dict) -> dict:
             "then export THINGS_AUTH_TOKEN before retrying."
         )
 
-    heading_uuid = _resolve_heading_uuid(project_id, heading_id_or_name)
+    # A UUID pinned at propose time wins over the name (confirm acts on exactly
+    # what the preview showed); legacy payloads fall back to name resolution.
+    heading_uuid = resolve_pinned_or_ref(
+        payload, project_id, heading_id_or_name, "deleted", _resolve_heading_uuid
+    )
 
     before = things_repo.get_todo(heading_uuid)
     if before is None:
@@ -147,15 +156,12 @@ async def undo(undo_entry: dict) -> dict:
 
 
 def _resolve_heading_uuid(project_id: str, heading_id_or_name: str) -> str:
-    """Resolve heading UUID — same logic as update_heading."""
+    """Resolve heading UUID — same logic as update_heading (UUIDs must be dummy
+    headings that belong to ``project_id``)."""
     # Try direct UUID lookup first.
     row = things_repo.get_todo(heading_id_or_name)
     if row is not None:
-        if not is_dummy_heading(row.get("title", "")):
-            raise ValueError(
-                f"Task {heading_id_or_name!r} (title={row.get('title')!r}) is not a "
-                "dummy heading. Native headings require AppleScript (step 5)."
-            )
+        verify_heading_row(project_id, heading_id_or_name, row, "deleted")
         return heading_id_or_name
 
     # Treat as a name — scan project items.

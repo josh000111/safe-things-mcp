@@ -38,6 +38,8 @@ from typing import Any
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "update_todo"
@@ -53,7 +55,7 @@ def make_preview(payload: dict) -> str:
     Empty strings render as ``(cleared)`` so the user sees that the field
     is being removed, not set to the literal empty string.
     """
-    todo_id = payload["todo_id"]
+    todo = pn.fmt(payload["todo_id"], payload, "todo_title")
     changes: list[str] = []
     for f in _UPDATABLE_FIELDS:
         v = payload.get(f)
@@ -67,7 +69,7 @@ def make_preview(payload: dict) -> str:
             v_str = repr(v)
         changes.append(f"{f}={v_str}")
     body = ", ".join(changes) if changes else "(no fields)"
-    return f"Update to-do {todo_id}: {body}"
+    return f"Update to-do {todo}: {body}"
 
 
 async def execute(payload: dict) -> dict:
@@ -106,6 +108,8 @@ async def execute(payload: dict) -> dict:
             f"No to-do found with id={todo_id!r}. It may have been deleted "
             "or the id may be wrong. Use list/search tools to find it."
         )
+    # Refuse project/heading/area ids: acting on them would hit the whole container.
+    ref_checks.require_todo(todo_id, before)
 
     inverse_fields = {f: _normalize_for_undo(f, before) for f in fields}
     pre_modified = before.get("modified") or ""

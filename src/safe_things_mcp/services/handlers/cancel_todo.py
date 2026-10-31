@@ -12,14 +12,15 @@ import asyncio
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "cancel_todo"
 
 
 def make_preview(payload: dict) -> str:
-    todo_id = payload["todo_id"]
-    return f"Mark to-do {todo_id} as canceled"
+    return f"Mark to-do {pn.fmt(payload['todo_id'], payload, 'todo_title')} as canceled"
 
 
 async def execute(payload: dict) -> dict:
@@ -39,6 +40,8 @@ async def execute(payload: dict) -> dict:
             f"No to-do found with id={todo_id!r}. It may have been deleted or "
             "the id may be wrong. Use list/search tools to find the right id."
         )
+    # Refuse project/heading/area ids: acting on them would hit the whole container.
+    ref_checks.require_todo(todo_id, before_state)
     if before_state.get("status") == "canceled":
         raise ValueError(
             f"To-do {todo_id!r} is already canceled. Nothing to do."

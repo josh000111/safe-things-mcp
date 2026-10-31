@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import sort_session, undo_log
 from . import bulk_move
 
@@ -35,7 +37,7 @@ def make_preview(payload: dict) -> str:
     if payload.get("area"):
         bits.append(f"area={payload['area']!r}")
     if payload.get("area_id"):
-        bits.append(f"area_id={payload['area_id']}")
+        bits.append(f"area_id={pn.fmt(payload['area_id'], payload, 'area_title')}")
     if payload.get("when"):
         bits.append(f"when={payload['when']}")
     if payload.get("deadline"):
@@ -44,13 +46,18 @@ def make_preview(payload: dict) -> str:
         bits.append(f"tags={','.join(payload['tags'])}")
     if payload.get("headings"):
         bits.append(f"headings=[{len(payload['headings'])} sections]")
-    if payload.get("member_todo_ids"):
-        bits.append(f"+ populate {len(payload['member_todo_ids'])} tasks")
-    return ", ".join(bits)
+    members = payload.get("member_todo_ids") or []
+    if members:
+        bits.append(f"+ populate {len(members)} tasks")
+    return ", ".join(bits) + pn.todo_lines(members, payload)
 
 
 async def execute(payload: dict) -> dict:
     title = payload["title"]
+
+    # Refuse before creating the project (or writing undo_log) if a member is a
+    # project/heading/area: bulk_move would refuse it only AFTER the project exists.
+    ref_checks.check_todos(payload.get("member_todo_ids") or [], things_repo.get_todo)
 
     # Capture group_id before any mutation so both undo_log entries share it.
     # undo_group(group_id) will then reverse them LIFO: bulk_move first (tasks

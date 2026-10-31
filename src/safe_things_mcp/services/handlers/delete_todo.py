@@ -14,6 +14,8 @@ Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 from __future__ import annotations
 
 from .. import things_repo
+from .. import preview_names as pn
+from .. import ref_checks
 from .. import applescript
 from ...state import undo_log
 
@@ -23,9 +25,13 @@ KIND = "delete_todo"
 def make_preview(payload: dict) -> str:
     todo_id = payload["todo_id"]
     snapshot = payload.get("snapshot") or {}
-    title = snapshot.get("title") or todo_id
+    if "todo_title" not in payload and snapshot.get("title"):
+        # Older payloads carried the title only in a snapshot.
+        todo = f"'{snapshot['title']}' ({todo_id})"
+    else:
+        todo = pn.fmt(todo_id, payload, "todo_title")
     return (
-        f"Delete to-do '{title}' ({todo_id}) — moves to Things Trash. "
+        f"Delete to-do {todo} — moves to Things Trash. "
         "Undo restores it from Trash. Trash auto-empties after 30 days."
     )
 
@@ -57,6 +63,8 @@ async def execute(payload: dict) -> dict:
             f"No to-do found with id={todo_id!r}. It may already be deleted "
             "or the id may be wrong. Use list/search tools to find it."
         )
+    # Refuse project/heading/area ids: acting on them would hit the whole container.
+    ref_checks.require_todo(todo_id, before)
     if before.get("list") == "Trash":
         raise ValueError(
             f"To-do {todo_id!r} is already in Trash. "

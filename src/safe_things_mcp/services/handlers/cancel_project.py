@@ -11,14 +11,15 @@ import asyncio
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "cancel_project"
 
 
 def make_preview(payload: dict) -> str:
-    project_id = payload["project_id"]
-    return f"Mark project {project_id} as canceled"
+    return f"Mark project {pn.fmt(payload['project_id'], payload, 'project_title')} as canceled"
 
 
 async def execute(payload: dict) -> dict:
@@ -32,7 +33,8 @@ async def execute(payload: dict) -> dict:
             "then export THINGS_AUTH_TOKEN before retrying."
         )
 
-    before_state = things_repo.get_project_row(project_id)
+    # Raises if the id is a to-do/heading (things.py ignores type= for UUIDs).
+    before_state = ref_checks.check_project(project_id)
     if before_state is None:
         raise ValueError(
             f"No project found with id={project_id!r}. It may have been deleted or "

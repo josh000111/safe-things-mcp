@@ -5,6 +5,8 @@ the swap is local. All returns are JSON-serializable dicts/lists.
 """
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
 from typing import Any
 
 import things
@@ -93,6 +95,105 @@ def tags(include_items: bool = False) -> list[dict[str, Any]]:
 def get_tag_names() -> set[str]:
     """Return the set of all tag names currently in Things (case-sensitive)."""
     return {t["title"] for t in things.tags(**_kw())}
+
+
+_STATUS_NAMES = {0: "incomplete", 2: "canceled", 3: "completed"}
+
+
+def items_with_tag(tag_title: str) -> list[dict[str, Any]]:
+    """Every to-do, project and area carrying ``tag_title``.
+
+    Unlike ``things.tasks(tag=...)`` this ignores status, trash and recurrence
+    filters: AppleScript ``delete tag`` strips the tag from ALL of them, so a
+    count or undo snapshot built from the default (incomplete-only) view would
+    silently under-report. Reads the tag join tables read-only.
+
+    Each row: ``{uuid, title, kind: 'to-do'|'project'|'area', status, trashed,
+    prior_tags}`` (``prior_tags`` = the item's full tag set, for undo).
+    Raises on ANY failure; callers must never treat that as "no items".
+    """
+    path = require_things_db_path()
+    conn = sqlite3.connect(f"{Path(path).as_uri()}?mode=ro", uri=True)
+    try:
+        tag_rows = conn.execute("SELECT uuid FROM TMTag WHERE title = ?", (tag_title,)).fetchall()
+        if not tag_rows:
+            raise ValueError(f"Tag {tag_title!r} not found in the Things database.")
+        out: list[dict[str, Any]] = []
+        for (tag_uuid,) in tag_rows:
+            for uuid, title, type_, status, trashed in conn.execute(
+                "SELECT T.uuid, T.title, T.type, T.status, T.trashed FROM TMTaskTag TT "
+                "JOIN TMTask T ON T.uuid = TT.tasks WHERE TT.tags = ? AND T.type IN (0, 1)",
+                (tag_uuid,),
+            ).fetchall():
+                prior = [r[0] for r in conn.execute(
+                    'SELECT G.title FROM TMTaskTag TT JOIN TMTag G ON G.uuid = TT.tags '
+                    'WHERE TT.tasks = ? ORDER BY G."index"', (uuid,))]
+                out.append({
+                    "uuid": uuid, "title": title or "",
+                    "kind": "project" if type_ == 1 else "to-do",
+                    "status": _STATUS_NAMES.get(status, str(status)),
+                    "trashed": bool(trashed), "prior_tags": prior,
+                })
+            for uuid, title in conn.execute(
+                "SELECT A.uuid, A.title FROM TMAreaTag AT JOIN TMArea A ON A.uuid = AT.areas "
+                "WHERE AT.tags = ?", (tag_uuid,),
+            ).fetchall():
+                prior = [r[0] for r in conn.execute(
+                    'SELECT G.title FROM TMAreaTag AT JOIN TMTag G ON G.uuid = AT.tags '
+                    'WHERE AT.areas = ? ORDER BY G."index"', (uuid,))]
+                out.append({
+                    "uuid": uuid, "title": title or "", "kind": "area",
+                    "status": "n/a", "trashed": False, "prior_tags": prior,
+                })
+        return out
+    finally:
+        conn.close()
+
+
+def tag_rows(tag_title: str) -> list[dict[str, Any]]:
+    """Every TMTag row titled ``tag_title`` (titles are NOT unique in Things).
+
+    Each row: ``{uuid, parent_uuid, parent_title, child_count}``. Read-only SQL;
+    raises on ANY failure (callers must never read that as "no such tag").
+    """
+    path = require_things_db_path()
+    conn = sqlite3.connect(f"{Path(path).as_uri()}?mode=ro", uri=True)
+    try:
+        return [
+            {"uuid": u, "parent_uuid": pu, "parent_title": pt, "child_count": cc}
+            for u, pu, pt, cc in conn.execute(
+                "SELECT T.uuid, T.parent, P.title, "
+                "(SELECT COUNT(*) FROM TMTag C WHERE C.parent = T.uuid) "
+                "FROM TMTag T LEFT JOIN TMTag P ON P.uuid = T.parent "
+                "WHERE T.title = ? ORDER BY T.\"index\"",
+                (tag_title,),
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+
+
+def current_item_tags(uuid: str, kind: str) -> list[str] | None:
+    """Current tag titles of a to-do/project/area in ANY status (incl. completed,
+    canceled, trashed), or ``None`` if the item no longer exists. Unlike
+    ``things.tasks(uuid)`` this is not limited to open, untrashed items. Read-only;
+    raises on any DB failure."""
+    path = require_things_db_path()
+    conn = sqlite3.connect(f"{Path(path).as_uri()}?mode=ro", uri=True)
+    try:
+        if kind == "area":
+            exists = conn.execute("SELECT 1 FROM TMArea WHERE uuid = ?", (uuid,)).fetchone()
+            sql = ('SELECT G.title FROM TMAreaTag X JOIN TMTag G ON G.uuid = X.tags '
+                   'WHERE X.areas = ? ORDER BY G."index"')
+        else:
+            exists = conn.execute("SELECT 1 FROM TMTask WHERE uuid = ?", (uuid,)).fetchone()
+            sql = ('SELECT G.title FROM TMTaskTag X JOIN TMTag G ON G.uuid = X.tags '
+                   'WHERE X.tasks = ? ORDER BY G."index"')
+        if not exists:
+            return None
+        return [r[0] for r in conn.execute(sql, (uuid,)).fetchall()]
+    finally:
+        conn.close()
 
 
 def search(query: str) -> list[dict[str, Any]]:

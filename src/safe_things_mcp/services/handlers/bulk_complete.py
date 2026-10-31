@@ -18,14 +18,17 @@ from __future__ import annotations
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "bulk_complete"
 
 
 def make_preview(payload: dict) -> str:
-    n = len(payload.get("todo_ids") or [])
-    return f"Bulk complete {n} to-do{'s' if n != 1 else ''}"
+    ids = payload.get("todo_ids") or []
+    n = len(ids)
+    return f"Bulk complete {n} to-do{'s' if n != 1 else ''}" + pn.todo_lines(ids, payload)
 
 
 async def execute(payload: dict) -> dict:
@@ -42,8 +45,11 @@ async def execute(payload: dict) -> dict:
         )
 
     items: list[dict] = []
+    # Refuse the whole batch (naming every project/heading/area id) before any
+    # mutation or undo_log write.
+    rows = ref_checks.check_todos(todo_ids, things_repo.get_todo)
     for uid in todo_ids:
-        row = things_repo.get_todo(uid)
+        row = rows.get(uid)
         if row is None:
             raise ValueError(
                 f"No to-do found with id={uid!r}. Bulk complete aborts before "

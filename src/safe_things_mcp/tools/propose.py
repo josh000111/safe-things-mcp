@@ -52,6 +52,8 @@ from ..models import (
     ProposeUpdateTodoInput,
 )
 from ..services import handlers, things_repo, url_scheme
+from ..services import preview_names as pn
+from ..services import ref_checks
 from ..state import pending, sort_session
 
 # Move targets that are NOT a project/area UUID (keywords + computed views).
@@ -101,6 +103,7 @@ async def propose_add_todo(
         checklist=checklist,
     )
     payload = payload_model.model_dump()
+    payload.update(pn.for_destination(list_id))
     preview = handlers.add_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.add_todo.KIND, payload=payload, preview=preview
@@ -138,6 +141,7 @@ async def propose_update_todo(
     # works correctly. Empty string / empty list survive (they mean
     # "clear"), but None ("don't touch") gets stripped.
     payload = payload_model.model_dump(exclude_none=True)
+    payload.update(pn.for_todo(todo_id))
     preview = handlers.update_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.update_todo.KIND, payload=payload, preview=preview
@@ -166,6 +170,8 @@ async def propose_move_todo(todo_id: str, target: str) -> dict:
         )
     payload_model = ProposeMoveTodoInput(todo_id=todo_id, target=target)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todo(todo_id))
+    payload.update(pn.for_destination(target))
     preview = handlers.move_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.move_todo.KIND, payload=payload, preview=preview
@@ -194,6 +200,7 @@ async def propose_delete_todo(todo_id: str) -> dict:
         )
     payload_model = ProposeDeleteTodoInput(todo_id=todo_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todo(todo_id))
     preview = handlers.delete_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_todo.KIND, payload=payload, preview=preview
@@ -264,6 +271,9 @@ async def propose_add_project(
         member_todo_ids=member_todo_ids,
     )
     payload = payload_model.model_dump()
+    payload.update(pn.for_area(area_id))
+    if member_todo_ids:
+        payload.update(pn.for_todos(member_todo_ids))
     preview = handlers.add_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.add_project.KIND, payload=payload, preview=preview
@@ -296,6 +306,8 @@ async def propose_update_project(
         area_id=area_id,
     )
     payload = payload_model.model_dump(exclude_none=True)
+    payload.update(pn.for_project(project_id))
+    payload.update(pn.for_area(area_id))
     preview = handlers.update_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.update_project.KIND, payload=payload, preview=preview
@@ -313,6 +325,7 @@ async def propose_bulk_complete(todo_ids: list[str]) -> dict:
     """
     payload_model = ProposeBulkCompleteInput(todo_ids=todo_ids)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todos(todo_ids))
     preview = handlers.bulk_complete.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_complete.KIND, payload=payload, preview=preview
@@ -330,6 +343,7 @@ async def propose_bulk_cancel(todo_ids: list[str], group_id: str | None = None) 
     """
     payload_model = ProposeBulkCancelInput(todo_ids=todo_ids, group_id=group_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todos(todo_ids))
     preview = handlers.bulk_delete.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_delete.KIND, payload=payload, preview=preview
@@ -369,6 +383,7 @@ async def propose_bulk_move(
     # propose_apply_ai_tags.  Do NOT register todo_ids here — is_sort_move()
     # must remain gated on explicit tagging via propose_apply_ai_tags so that
     # unrelated bulk_moves are not promoted to the heading path.
+    ref_checks.check_todos(todo_ids)  # before the sort session is touched
     group_id = sort_session.begin(group_id)
     sort_move = sort_session.is_sort_move(todo_ids)
     # During a sort, a move of sort-member tasks into a pre-existing user project
@@ -380,6 +395,8 @@ async def propose_bulk_move(
         )
     payload_model = ProposeBulkMoveInput(todo_ids=todo_ids, target=target, group_id=group_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todos(todo_ids))
+    payload.update(pn.for_destination(target))
     preview = handlers.bulk_move.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_move.KIND, payload=payload, preview=preview
@@ -413,6 +430,7 @@ async def propose_bulk_update(
         group_id=group_id,
     )
     payload = payload_model.model_dump(exclude_none=True)
+    payload.update(pn.for_todos(todo_ids))
     preview = handlers.bulk_update.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_update.KIND, payload=payload, preview=preview
@@ -440,6 +458,7 @@ async def propose_bulk_delete_todo(
         )
     payload_model = ProposeBulkDeleteInput(todo_ids=todo_ids, group_id=group_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todos(todo_ids))
     preview = handlers.bulk_delete_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_delete_todo.KIND, payload=payload, preview=preview
@@ -467,6 +486,7 @@ async def propose_bulk_delete_heading(
         group_id=group_id,
     )
     payload = payload_model.model_dump()
+    payload.update(pn.for_headings(project_id, heading_ids_or_names, "delete"))
     preview = handlers.bulk_delete_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_delete_heading.KIND, payload=payload, preview=preview
@@ -509,6 +529,7 @@ async def propose_bulk_add_todo(
         preserve_order=preserve_order,
     )
     payload = payload_model.model_dump()
+    payload.update(pn.for_destination(list_id))
     preview = handlers.bulk_add_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_add_todo.KIND, payload=payload, preview=preview
@@ -523,6 +544,7 @@ async def propose_cancel_todo(todo_id: str) -> dict:
     """
     payload_model = ProposeCancelTodoInput(todo_id=todo_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todo(todo_id))
     preview = handlers.cancel_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.cancel_todo.KIND, payload=payload, preview=preview
@@ -537,6 +559,7 @@ async def propose_cancel_project(project_id: str) -> dict:
     """
     payload_model = ProposeCancelProjectInput(project_id=project_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_project(project_id))
     preview = handlers.cancel_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.cancel_project.KIND, payload=payload, preview=preview
@@ -560,6 +583,7 @@ async def propose_delete_project(project_id: str) -> dict:
         )
     payload_model = ProposeDeleteProjectInput(project_id=project_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_project(project_id))
     preview = handlers.delete_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_project.KIND, payload=payload, preview=preview
@@ -594,6 +618,9 @@ async def propose_add_heading(
         project_id=project_id, name=name, after_todo_id=after_todo_id, group_id=group_id
     )
     payload = payload_model.model_dump()
+    pn.for_project(project_id)  # raises if project_id is a to-do/heading, not a project
+    if after_todo_id:
+        payload.update({"after_todo_title": pn.todo_title(after_todo_id)})
     preview = handlers.add_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.add_heading.KIND, payload=payload, preview=preview
@@ -621,6 +648,9 @@ async def propose_update_heading(
         new_name=new_name,
     )
     payload = payload_model.model_dump()
+    # Resolved with execute's own resolver: raises (so propose fails) on anything
+    # execute would refuse, and pins heading_uuid for confirm.
+    payload.update(pn.for_heading(project_id, heading_id_or_name, "update"))
     preview = handlers.update_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.update_heading.KIND, payload=payload, preview=preview
@@ -652,6 +682,7 @@ async def propose_delete_heading(
         group_id=group_id,
     )
     payload = payload_model.model_dump()
+    payload.update(pn.for_heading(project_id, heading_id_or_name, "delete"))
     preview = handlers.delete_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_heading.KIND, payload=payload, preview=preview
@@ -669,7 +700,7 @@ async def propose_append_checklist_items(todo_id: str, items: list[str]) -> dict
     supported by the Things URL scheme or AppleScript. Use
     ``propose_replace_checklist`` to rewrite the whole list.
     """
-    payload = {"todo_id": todo_id, "items": items}
+    payload = {"todo_id": todo_id, "items": items, **pn.for_todo(todo_id)}
     from ..services.handlers import append_checklist as _append_checklist
     preview = _append_checklist.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -685,7 +716,7 @@ async def propose_prepend_checklist_items(todo_id: str, items: list[str]) -> dic
     **Limitation:** per-item edit, delete, completion, or reorder are not
     supported. Use ``propose_replace_checklist`` to rewrite the whole list.
     """
-    payload = {"todo_id": todo_id, "items": items}
+    payload = {"todo_id": todo_id, "items": items, **pn.for_todo(todo_id)}
     from ..services.handlers import prepend_checklist as _prepend_checklist
     preview = _prepend_checklist.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -747,7 +778,10 @@ async def propose_reorder_todos(
         "original_order": current_uuids,
         "created_dummy_uuids": [],
         "allow_existing_reorder": allow_existing_reorder,
+        "todo_titles": pn.container_titles(container_type, container_id, master_order),
     }
+    if container_type == "project":
+        payload["container_title"] = pn.project_title(container_id)
 
     preview = _reorder_todos.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -768,7 +802,21 @@ async def propose_replace_checklist(todo_id: str, items: list[str]) -> dict:
     supported by Things URL scheme or AppleScript — this tool is the only
     way to restructure a checklist.
     """
-    payload = {"todo_id": todo_id, "items": items}
+    payload = {"todo_id": todo_id, "items": items, **pn.for_todo(todo_id)}
+    # The preview must show what the overwrite discards. If the existing checklist
+    # can't be read, refuse to propose rather than hide the "will be removed" list.
+    try:
+        payload["existing_checklist"] = [
+            c.get("title", "") for c in things_repo.get_checklist_items(todo_id)
+        ]
+    except config.ThingsDBAccessError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not read the existing checklist of {todo_id!r} ({exc}); refusing to "
+            "propose replacing it without showing what would be removed. Retry once "
+            "the Things database is readable."
+        ) from exc
     from ..services.handlers import replace_checklist as _replace_checklist
     preview = _replace_checklist.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -819,6 +867,8 @@ async def propose_move_under_ai_heading(
         todo_ids=todo_ids, project_id=project_id, group_id=group_id
     )
     payload = payload_model.model_dump()
+    payload.update(pn.for_todos(todo_ids))
+    payload.update(pn.for_project(project_id))
     preview = handlers.move_under_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.move_under_heading.KIND, payload=payload, preview=preview
@@ -921,6 +971,9 @@ async def propose_manage_ai_tag(
 async def propose_delete_ai_tag(name: str) -> dict:
     """Propose deleting an AI tag — removes it from ALL tasks that carry it.
 
+    Refused when more than one tag has this title, when the tag has child
+    tags, or when it is not filed under the AI parent tag.
+
     WARNING: Wide-blast destructive operation. The tag is removed from
     every task carrying it — not just the current batch. Use
     ``list_ai_tags()`` first to see how many tasks carry the tag.
@@ -940,6 +993,21 @@ async def propose_delete_ai_tag(name: str) -> dict:
         )
     payload_model = ProposeDeleteAiTagInput(name=name)
     payload = payload_model.model_dump()
+    # Duplicate title / parent with children / non-AI tag: refuse now (execute re-checks).
+    # Any failure reading the tag table propagates: never propose blind.
+    handlers.delete_ai_tag.check_deletable(name)
+    # Count EVERYTHING the delete will strip the tag from (every status; to-dos,
+    # projects, areas). execute() recounts. A failed lookup is stored as None so the
+    # preview says "unknown", never "0"; an inaccessible DB fails the propose.
+    try:
+        carriers = handlers.delete_ai_tag._find_tasks_with_tag(name)
+    except (config.ThingsDBAccessError, ValueError):
+        raise  # DB inaccessible, or the tag doesn't exist (execute would refuse it)
+    except Exception:
+        payload["carrying_count"] = None
+    else:
+        payload["carrying_count"] = len(carriers)
+        payload["carrying_summary"] = handlers.delete_ai_tag.summarize_carriers(carriers)
     preview = handlers.delete_ai_tag.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_ai_tag.KIND, payload=payload, preview=preview
@@ -999,6 +1067,8 @@ async def propose_apply_ai_tags(
         raise RuntimeError(
             "propose_apply_ai_tags requires SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1."
         )
+    # Refuse project/heading/area ids first, before touching the sort session.
+    ref_checks.check_todos(i.get("todo_uuid") for i in items)
     # apply_ai_tags is the sort anchor: open a session so every later sort tool
     # inherits this group_id even if the agent never threads one through. A
     # server-owned id guarantees undo_group can reverse the whole run.
@@ -1006,6 +1076,16 @@ async def propose_apply_ai_tags(
     sort_session.register_tagged(item.get("todo_uuid") for item in items)
     payload_model = ProposeApplyAiTagsInput(items=items, group_id=group_id)
     payload = payload_model.model_dump()
+    payload["todo_titles"] = pn.for_todos(
+        [i.get("todo_uuid") for i in payload["items"] if i.get("todo_uuid")]
+    )["todo_titles"]
+    dest_ids = [
+        d for i in payload["items"]
+        if (d := (i.get("routing") or {}).get("dest_uuid"))
+    ]
+    payload["destination_titles"] = {
+        d: pn.destination_title(d) for d in dict.fromkeys(dest_ids)
+    }
     preview = handlers.apply_ai_tags.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.apply_ai_tags.KIND, payload=payload, preview=preview
@@ -1041,6 +1121,7 @@ async def propose_cleanup_ai_tags(
         group_id = sort_session.active()
     payload_model = ProposeCleanupAiTagsInput(todo_uuids=todo_uuids, group_id=group_id)
     payload = payload_model.model_dump()
+    payload.update(pn.for_todos(todo_uuids))
     preview = handlers.cleanup_ai_tags.make_preview(payload)
     result = await _enqueue_and_maybe_auto_confirm(
         kind=handlers.cleanup_ai_tags.KIND, payload=payload, preview=preview

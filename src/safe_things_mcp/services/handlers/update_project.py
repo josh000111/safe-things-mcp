@@ -28,6 +28,8 @@ from typing import Any
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "update_project"
@@ -42,13 +44,15 @@ def make_preview(payload: dict) -> str:
     Empty strings render as ``(cleared)`` so the user sees that the field
     is being removed, not set to the literal empty string.
     """
-    project_id = payload["project_id"]
+    project = pn.fmt(payload["project_id"], payload, "project_title")
     changes: list[str] = []
     for f in _UPDATABLE_FIELDS:
         v = payload.get(f)
         if v is None:
             continue
-        if isinstance(v, list):
+        if f == "area_id" and v:
+            v_str = pn.fmt(v, payload, "area_title")
+        elif isinstance(v, list):
             v_str = "(cleared)" if not v else f"[{','.join(v)}]"
         elif isinstance(v, str):
             v_str = "(cleared)" if v == "" else repr(v)
@@ -56,7 +60,7 @@ def make_preview(payload: dict) -> str:
             v_str = repr(v)
         changes.append(f"{f}={v_str}")
     body = ", ".join(changes) if changes else "(no fields)"
-    return f"Update project {project_id}: {body}"
+    return f"Update project {project}: {body}"
 
 
 async def execute(payload: dict) -> dict:
@@ -77,7 +81,8 @@ async def execute(payload: dict) -> dict:
             "then export THINGS_AUTH_TOKEN before retrying."
         )
 
-    before = things_repo.get_project_row(project_id)
+    # Raises if the id is a to-do/heading (things.py ignores type= for UUIDs).
+    before = ref_checks.check_project(project_id)
     if before is None:
         raise ValueError(
             f"No project found with id={project_id!r}. It may have been "

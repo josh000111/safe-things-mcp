@@ -14,6 +14,7 @@ import time
 
 from ... import config
 from .. import applescript, things_repo, url_scheme
+from .. import preview_names as pn
 from ...state import undo_log
 from .dummy_heading import AI_NEWLY_ADDED_HEADING
 
@@ -28,7 +29,11 @@ def make_preview(payload: dict) -> str:
     dummy_creation_plan = payload.get("dummy_creation_plan", [])
 
     count = len(master_order)
-    lines = [f"Reorder {count} to-do(s) in '{container_id}'."]
+    if "container_title" in payload:
+        container = pn.fmt(container_id, payload, "container_title")
+    else:
+        container = f"'{container_id}'"
+    lines = [f"Reorder {count} to-do(s) in {container}."]
 
     if dummy_creation_plan:
         names = ", ".join(repr(e["name"]) for e in dummy_creation_plan)
@@ -42,7 +47,7 @@ def make_preview(payload: dict) -> str:
             "Warning: undo cannot reinstate native heading positions."
         )
 
-    return " ".join(lines)
+    return " ".join(lines) + pn.todo_lines(master_order, payload)
 
 
 async def execute(payload: dict) -> dict:

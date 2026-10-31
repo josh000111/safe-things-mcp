@@ -24,6 +24,8 @@ from typing import Any
 
 from ... import config
 from .. import applescript, things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 from .dummy_heading import AI_NEWLY_ADDED_HEADING, AI_SEPARATOR_RULE
 from .move_todo import _inverse_project
@@ -34,12 +36,16 @@ _CREATED_FMT = "%Y-%m-%d %H:%M:%S"
 
 
 def make_preview(payload: dict) -> str:
-    n = len(payload.get("todo_ids") or [])
-    project_id = payload.get("project_id", "")
+    ids = payload.get("todo_ids") or []
+    n = len(ids)
+    if "project_title" in payload:
+        project = pn.fmt(payload.get("project_id", ""), payload, "project_title")
+    else:
+        project = repr(payload.get("project_id", ""))
     return (
-        f"Move {n} to-do{'s' if n != 1 else ''} into project {project_id!r} "
+        f"Move {n} to-do{'s' if n != 1 else ''} into project {project} "
         f"under '{AI_NEWLY_ADDED_HEADING}' marker (created if absent)"
-    )
+    ) + pn.todo_lines(ids, payload)
 
 
 async def execute(payload: dict) -> dict:
@@ -63,16 +69,18 @@ async def execute(payload: dict) -> dict:
             "Set the environment variable and restart the MCP server."
         )
 
-    if things_repo.project(project_id) is None:
+    if ref_checks.check_project(project_id) is None:  # raises on a to-do/heading id
         raise ValueError(
             f"Project {project_id!r} not found. "
             "Use list/search tools to find the correct project UUID."
         )
 
     # Validate all todos exist; filter out the marker if accidentally included.
+    # Refuse the whole batch if any id is a project/heading/area, before any mutation.
+    rows = ref_checks.check_todos(todo_ids, things_repo.get_todo)
     items: list[dict[str, Any]] = []
     for uid in todo_ids:
-        row = things_repo.get_todo(uid)
+        row = rows.get(uid)
         if row is None:
             raise ValueError(
                 f"No to-do found with id={uid!r}. Aborting before any mutation."

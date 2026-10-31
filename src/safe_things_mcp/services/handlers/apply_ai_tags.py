@@ -12,6 +12,8 @@ import time
 from typing import Any
 
 from .. import applescript, things_repo
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log, ai_tag_routing
 from ...config import WRITE_POLL_INTERVAL_SECONDS, WRITE_POLL_TIMEOUT_SECONDS
 
@@ -26,15 +28,22 @@ def make_preview(payload: dict) -> str:
         all_tags.extend(item.get("add_tags") or [])
     unique_tags = sorted(set(all_tags))
     tag_str = ", ".join(unique_tags) if unique_tags else "(none)"
-    titles = []
-    for item in items[:3]:
-        todo_uuid = item.get("todo_uuid", "")
-        titles.append(todo_uuid)
-    suffix = f"... and {n - 3} more" if n > 3 else ""
+    todo_titles = payload.get("todo_titles")
+    dest_titles = payload.get("destination_titles")
+    labels = []
+    for item in items:
+        label = pn.fmt_map(item.get("todo_uuid", ""), todo_titles)
+        tags = ", ".join(item.get("add_tags") or []) or "(none)"
+        label += f": add {tags}"
+        # execute only adds the tags and records routing metadata (ai_tag_routing);
+        # the to-do is moved later, by a separate move/sort step.
+        dest = (item.get("routing") or {}).get("dest_uuid")
+        if dest:
+            label += f" (suggested home: {pn.fmt_map(dest, dest_titles)}; nothing moves yet)"
+        labels.append(label)
     return (
-        f"Apply AI tags to {n} to-do(s): [{tag_str}] → "
-        + ", ".join(titles)
-        + suffix
+        f"Apply AI tags to {n} to-do(s) (adds tags and records suggested homes; "
+        f"does not move anything): [{tag_str}]" + pn.item_lines(labels)
     )
 
 
@@ -55,12 +64,16 @@ async def execute(payload: dict) -> dict:
     # Read all existing tag names once
     existing_names = things_repo.get_tag_names()
 
+    # Refuse the whole batch if any id is a project/heading/area (setting tags on
+    # it would silently retag the container), before any mutation.
+    rows = ref_checks.check_todos([i["todo_uuid"] for i in items], things_repo.get_todo)
+
     # Build undo snapshot: read current tags for each todo before mutation
     undo_items: list[dict[str, Any]] = []
     for item in items:
         todo_uuid = item["todo_uuid"]
         add_tags = item.get("add_tags") or []
-        todo = things_repo.get_todo(todo_uuid)
+        todo = rows.get(todo_uuid)
         if todo is None:
             raise ValueError(f"To-do '{todo_uuid}' not found in Things.")
         current_tags: list[str] = list(todo.get("tags") or [])

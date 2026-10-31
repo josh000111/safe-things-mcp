@@ -16,6 +16,8 @@ Requires ``SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1``.
 from __future__ import annotations
 
 from .. import things_repo
+from .. import preview_names as pn
+from .. import ref_checks
 from .. import applescript
 from ...state import undo_log
 
@@ -25,9 +27,13 @@ KIND = "delete_project"
 def make_preview(payload: dict) -> str:
     project_id = payload["project_id"]
     snapshot = payload.get("snapshot") or {}
-    title = snapshot.get("title") or project_id
+    if "project_title" not in payload and snapshot.get("title"):
+        # Older payloads carried the title only in a snapshot.
+        project = f"'{snapshot['title']}' ({project_id})"
+    else:
+        project = pn.fmt(project_id, payload, "project_title")
     return (
-        f"Deletes project AND all its tasks '{title}' ({project_id}) → Things Trash. "
+        f"Deletes project AND all its tasks {project} → Things Trash. "
         "Undo restores the project from Trash to Anytime (area membership not restored). "
         "Trash auto-empties after 30 days."
     )
@@ -54,7 +60,8 @@ async def execute(payload: dict) -> dict:
     if not project_id:
         raise ValueError("project_id is required")
 
-    before = things_repo.get_project_row(project_id)
+    # Raises if the id is a to-do/heading (things.py ignores type= for UUIDs).
+    before = ref_checks.check_project(project_id)
     if before is None:
         raise ValueError(
             f"No project found with id={project_id!r}. It may already be deleted "

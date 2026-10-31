@@ -9,15 +9,20 @@ import asyncio
 
 from ... import config
 from .. import things_repo, url_scheme
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log
 
 KIND = "append_checklist"
 
 
 def make_preview(payload: dict) -> str:
-    todo_id = payload["todo_id"]
     items = payload.get("items", [])
-    return f"Append {len(items)} checklist item(s) to to-do {todo_id}"
+    todo = pn.fmt(payload["todo_id"], payload, "todo_title")
+    return (
+        f"Append {len(items)} checklist item(s) to to-do {todo}"
+        + pn.item_lines([f"'{i}'" for i in items])
+    )
 
 
 async def execute(payload: dict) -> dict:
@@ -38,6 +43,8 @@ async def execute(payload: dict) -> dict:
             f"No to-do found with id={todo_id!r}. It may have been deleted or "
             "the id may be wrong. Use list/search tools to find the right id."
         )
+    # Refuse project/heading/area ids: acting on them would hit the whole container.
+    ref_checks.require_todo(todo_id, todo)
 
     before_items = things_repo.get_checklist_items(todo_id)
     entry_id = undo_log.record(

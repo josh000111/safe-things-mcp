@@ -15,6 +15,8 @@ import time
 from typing import Any
 
 from .. import applescript, things_repo
+from .. import preview_names as pn
+from .. import ref_checks
 from ...state import undo_log, ai_tag_routing
 from ...config import WRITE_POLL_INTERVAL_SECONDS, WRITE_POLL_TIMEOUT_SECONDS
 
@@ -24,7 +26,10 @@ KIND = "cleanup_ai_tags"
 def make_preview(payload: dict) -> str:
     todo_uuids = payload.get("todo_uuids") or []
     n = len(todo_uuids)
-    return f"Remove transient AI routing tags from {n} to-do(s) after confirmed sort."
+    return (
+        f"Remove transient AI routing tags from {n} to-do(s) after confirmed sort."
+        + pn.todo_lines(todo_uuids, payload)
+    )
 
 
 async def execute(payload: dict) -> dict:
@@ -40,6 +45,9 @@ async def execute(payload: dict) -> dict:
 
     if not todo_uuids:
         raise ValueError("cleanup_ai_tags requires at least one todo_uuid.")
+
+    # Refuse the whole batch if any id is a project/heading/area, before any mutation.
+    ref_checks.check_todos(todo_uuids, things_repo.get_todo)
 
     # Query transient routing rows for these todos (transient=1 only)
     transient_rows = ai_tag_routing.get_transient_for_todos(todo_uuids)
