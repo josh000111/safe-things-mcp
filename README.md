@@ -20,7 +20,7 @@ Most Things MCP servers offer basic reads and direct URL-scheme writes. This one
 | Project heading management | yes | no | no | no |
 | Reorder to-dos | yes | no | no | no |
 | Delete to Trash (not just cancel) | yes | yes | partial | no |
-| Signed binary build (persistent permission grant) | yes | no | no | no |
+| Claude Desktop extension as a signed app (macOS data permission sticks, no Full Disk Access) | yes | no | no | no |
 | Total tools | 62 | ~25 | 37 | ~10 |
 
 **Propose/confirm** -- every write previews what will change before anything is executed. You see what the agent is about to do and approve or reject it. Destructive and bulk operations can never be auto-confirmed.
@@ -33,109 +33,46 @@ Most Things MCP servers offer basic reads and direct URL-scheme writes. This one
 
 ## Requirements
 
-- macOS with Things 3 installed and running
-- Python 3.11+
-- [`uv`](https://github.com/astral-sh/uv) (recommended) or `pip`
-- Things URL scheme enabled: **Things > Settings > General > Enable Things URLs**
+- macOS 12 or later, with [Things 3 for Mac](https://culturedcode.com/things/mac/) installed and opened at least once
+- [`uv`](https://docs.astral.sh/uv/)
+- For the Claude Desktop extension: Xcode Command Line Tools (`xcode-select --install`) and Node.js (for `npx`)
+- For writes: **Things > Settings > General > Enable Things URLs**
 
 ---
 
 ## Install
 
+Choose the path for the app you use:
+
+| Your app | How to install | Where you grant the macOS permission |
+|---|---|---|
+| **Claude Desktop** (Chat and Code tabs) | [Extension](#claude-desktop-extension), built on your Mac | **SafeThingsMCP** |
+| **Claude Code CLI, Cursor, VS Code, Codex, other MCP clients** | [`uvx` config](#other-mcp-clients-uvx) | The app that launches the server (your terminal, editor, etc.) |
+
+### Claude Desktop extension
+
 ```bash
-git clone https://github.com/josh000111/safe-things-mcp safe-things-mcp
+git clone https://github.com/josh000111/safe-things-mcp
 cd safe-things-mcp
-uv venv --python /opt/homebrew/bin/python3
-uv sync
+./build_tools/build_mcpb.sh
 ```
 
-Verify the install:
+The script freezes the server, wraps it in a small signed app called **SafeThingsMCP**, and writes `dist_mcpb/safe-things-mcp.mcpb`. The app is signed with a certificate the script creates on your Mac the first time it runs. The key never leaves your machine.
 
-```bash
-.venv/bin/safe-things-mcp --help
-```
+1. In Claude Desktop, open **Settings > Extensions** and drag in `dist_mcpb/safe-things-mcp.mcpb`. Paste your Things auth token when asked (see [First-run setup](#first-run-setup)).
+2. Ask Claude *"What's in my Things inbox?"*. The first read fails with a message saying macOS is blocking access. That's expected: macOS never shows a popup for this permission.
+3. Open **System Settings > Privacy & Security > Files & Folders**, find **SafeThingsMCP**, and turn on **Data shared by Things and affiliated apps**.
+4. Ask again. It works from now on.
 
-There are two ways to run the server. See [Two ways to run it](#two-ways-to-run-it) for the full comparison.
+One install covers both the Chat and Code tabs. If you also add a manual config inside Claude Desktop, give it a different name: two servers with the same name collide, and only one of them answers.
 
-- **Want effortless updates?** Use Option A (`uvx`) -- you can skip the build step and point your client straight at the repo.
-- **Want a persistent macOS permission grant?** Build the signed bundle (Option B):
+**Updating:** `git pull`, re-run `./build_tools/build_mcpb.sh`, and drag the new file in. The permission carries over as long as you build on the same Mac, because macOS ties it to the app's ID and your Mac's signing certificate.
 
-```bash
-./build_tools/build_signed.sh
-```
+**Why build it yourself?** A ready-made download would need an Apple Developer ID and notarization to get past Gatekeeper. Building locally avoids that and keeps the signing key on your own Mac.
 
-This produces a self-contained signed binary at `dist_signed/safe-things-mcp/safe-things-mcp` and prints a ready-to-paste client config block.
+### Other MCP clients (uvx)
 
----
-
-## First-run setup
-
-Read tools work immediately with no configuration. The steps below are only needed for write operations (any `propose_*` tool or direct write other than `add_inbox_todo`).
-
-1. Things > Settings > General > **Enable Things URLs** (toggle on if not already).
-2. Click **Manage**, copy the auth token.
-3. Add it to your MCP client's env block as `THINGS_AUTH_TOKEN`.
-4. For delete, reorder, and AI tagging operations, also add `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1` to the same env block.
-5. Restart the client.
-6. Pre-create the AI flag tags (once, idempotent): ask the agent to call `ensure_ai_tags()`. This creates the `AI` parent tag and the five abstain flags (`*Unclear*`, `*Ambiguous Home*`, etc.) if any are missing.
-
-Verify: ask the agent *"call health()"* and confirm `url_scheme_auth_token_set: true`.
-
-<details>
-<summary><strong>macOS permission prompts -- what to expect</strong></summary>
-
-safe-things-mcp triggers two macOS permission dialogs.
-
-**1. "python would like to access data from other apps"** (the dialog may instead name **"claude"** -- see below)
-
-safe-things-mcp reads the Things 3 database directly from Things' protected app-container folder. macOS (TCC) asks for consent before another app's data can be read.
-
-The app named in the dialog is whichever process macOS holds *responsible* for the access, not "safe-things-mcp". When the server runs on a plain Python interpreter that the client launches directly, you see **"python"**. When the client wraps the server in a helper process (notably Claude Desktop), macOS walks up to the parent app and you see **"claude"** instead. Either way it is the same prompt about the same Things-database access.
-
-macOS only remembers that consent for a program with a stable, signed identity. When the server runs on a plain Python interpreter, macOS sees an anonymous program and re-prompts on essentially every launch. This affects every Things MCP server that reads the database through an unsigned interpreter -- it is not specific to this project.
-
-**The fix: use the signed bundle (Option B).** `build_tools/build_signed.sh` freezes the server into a signed binary, giving macOS an identity it can remember. On clients that launch the server directly (Cursor, VS Code, Claude Code), you get one prompt and then it stops.
-
-> **Claude Desktop is the exception.** Claude Desktop wraps MCP servers in a helper process (`Claude.app/Contents/Helpers/disclaimer`), which prevents macOS from recording the permission grant for the actual server binary. The prompt recurs on every launch regardless of signing. This is an upstream Claude Desktop bug ([anthropics/claude-code#36832](https://github.com/anthropics/claude-code/issues/36832)).
->
-> On Claude Desktop your options are:
-> - Use a direct-launch client (Cursor, VS Code, Claude Code) with the signed build for a prompt-free experience, **or**
-> - Grant Full Disk Access to Claude (System Settings > Privacy & Security > Full Disk Access > add `/Applications/Claude.app`). This persists because it attaches to the Claude app itself. Note: this is a broad grant -- it removes the OS file-access guardrail for everything Claude runs (every MCP server and agent action). It does not bypass Claude's own per-tool approval prompts. **or**
-> - Live with the prompt for now and wait for the upstream fix.
-
-> **Update, 2026-10-16 -- confirmed on a current Claude Desktop build (2.42304.0, bundled CLI 2.1.299, macOS 26.x).** On this combination the behavior is worse than "recurs": **no prompt appears at all**, and the read silently fails with `unable to open database file`. Live process trace confirmed the actual launch chain is four hops deep:
->
-> ```
-> Claude.app -> Contents/Helpers/disclaimer -> bundled claude-code CLI -> uv run -> python3.11 (safe-things-mcp)
-> ```
->
-> This matches the root cause described in currently-open upstream issues (checked same day): [anthropics/claude-code#92784](https://github.com/anthropics/claude-code/issues/92784) ("grant stored session-scoped"), [#83841](https://github.com/anthropics/claude-code/issues/83841), [#87833](https://github.com/anthropics/claude-code/issues/87833). The original #36832 cited above was closed as a duplicate on 2026-03-24; the bug itself is still open under these newer reports.
->
-> **Tested on this chain, in order, same day:**
-> | Attempt | Result |
-> |---|---|
-> | Manually add `python3.11`'s `Python.app` (the exact leaf binary, e.g. `/opt/homebrew/Cellar/python@3.11/<version>/Frameworks/Python.framework/Versions/3.11/Resources/Python.app`) to Full Disk Access | **Failed** -- still `unable to open database file` after full quit/relaunch |
-> | Manually add `uv` (`~/.local/bin/uv`, the direct parent of the python process) to Full Disk Access | **Failed** -- same error, after full quit/relaunch |
-> | Grant Full Disk Access to `/Applications/Claude.app` itself (the broad option) | *pending confirmation -- update this row once tested* |
->
-> Both scoped attempts failing points to macOS resolving the TCC "responsible process" all the way up the chain (to Claude.app or its bundled CLI worker), not to the leaf binary actually touching the file -- so narrower per-binary grants do not help on this launch path. If you're on Claude Desktop and hit the silent-failure variant (not just a recurring prompt), scoped grants are not worth trying first; go straight to broad Claude.app Full Disk Access, or avoid the Desktop wrapper entirely by running the standalone `claude` CLI (not the Desktop app's bundled copy) as a direct-launch client -- that path is architecturally identical to Cursor/VS Code above and Option B's signed-binary fix applies normally there.
->
-> One version-pinning note from the same investigation: this venv's Python symlinks through `/opt/homebrew/opt/python@3.11/` (Homebrew's "current version" pointer), not a hardcoded patch version. A `brew upgrade python@3.11` moves that pointer to a new Cellar path and will invalidate any grant tied to the old path -- this is a real, separate cause of permission churn, distinct from the Claude Desktop wrapper issue above.
-
-**2. "safe-things-mcp wants to control Things 3"**
-
-Appears the first time an AppleScript-backed operation runs (requires `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`). Click **Allow** once. This Automation grant persists.
-
-</details>
-
----
-
-## Two ways to run it
-
-<details>
-<summary><strong>Option A -- uvx (easiest updates)</strong></summary>
-
-Point your client straight at the repo. uv fetches, builds, and runs the server automatically.
+uv fetches, builds and runs the server straight from this repo:
 
 ```json
 {
@@ -152,94 +89,60 @@ Point your client straight at the repo. uv fetches, builds, and runs the server 
 }
 ```
 
-Add `"--refresh"` to `args` to pull the latest on every launch (costs a few seconds of network at startup).
-
-**Trade-off:** the permission prompt shows "python3.11" (the interpreter) and recurs on every launch on every client. Updates are trivial.
-
-</details>
-
-<details>
-<summary><strong>Option B -- signed bundle (persistent permission grant)</strong></summary>
-
-Build the signed binary once:
+Claude Code CLI:
 
 ```bash
-./build_tools/build_signed.sh
+claude mcp add safe-things-mcp -e THINGS_AUTH_TOKEN=paste-token-here -e SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1 -- uvx --from git+https://github.com/josh000111/safe-things-mcp safe-things-mcp
 ```
 
-Then point your client's `command` at the printed path (`dist_signed/safe-things-mcp/safe-things-mcp`).
+Add `--refresh` right after `uvx` to pull the latest code on every launch (costs a few seconds at startup).
 
-**Trade-off:** updates require `git pull && uv sync && ./build_tools/build_signed.sh` followed by a client restart. The permission prompt shows "safe-things-mcp" and on direct-launch clients (Cursor, VS Code, Claude Code) it is remembered after one approval.
-
-</details>
-
-| Client | Option A -- uvx | Option B -- signed bundle |
-|---|---|---|
-| **Claude Desktop** | "python3.11", every launch | "safe-things-mcp", every launch (upstream bug) |
-| **Cursor / VS Code / Claude Code** | "python3.11", recurs | "safe-things-mcp", once then remembered |
-| Updates | trivial / auto | manual rebuild |
-
-**Rule of thumb:** primarily on Claude Desktop and want effortless updates -- Option A (the prompt recurs either way there, so you give up little). On Cursor, VS Code, or Claude Code and want the prompt to stop -- Option B.
-
-<details>
-<summary><strong>Option C -- Claude Desktop Extension (.mcpb)</strong></summary>
-
-Run `./build_tools/build_mcpb.sh`, then install the resulting `dist_mcpb/safe-things-mcp.mcpb` via Claude Desktop > Settings > Extensions (drag the file in), pasting your Things auth token into the install form.
-
-This is currently the only one-click install path among supported clients -- Cursor, VS Code, Codex, and the Claude Code CLI still need the manual JSON config documented below.
-
-**It does not route around the Claude Desktop `disclaimer`-wrapper bug described above.** The bundle still ships the same signed binary as Option B, launched by the same Desktop helper process -- expect the same recurring prompt, or the silent `unable to open database file` failure on affected builds. See the "macOS permission prompts" section above before assuming `.mcpb` fixes permissions by itself.
-
-</details>
+**Permission:** with this setup macOS gives the Things-data permission to the app that launched the server, such as Terminal, iTerm, Cursor or VS Code. After the first (failed) read, turn on **Data shared by Things and affiliated apps** under that app in **System Settings > Privacy & Security > Files & Folders**. Note that the app then has access to Things data for everything it runs, which is one reason to prefer the extension on Claude Desktop. (Tested with Claude Desktop's Code tab, where the entry is called "claude". Other apps follow the same macOS rule but haven't each been tested.)
 
 <details>
 <summary><strong>Always-on agent apps (Claude Duet, ChatGPT Dots, Meta Muse, xAI Grok Bot) -- not supported</strong></summary>
 
-These run on their own remote cloud VM, not on your Mac, and none of them currently supports attaching a local stdio MCP server -- the only bridge any of them documents to your own machine is GUI/computer-use screen automation, not the MCP protocol safe-things-mcp uses. OpenAI states this explicitly for Dots ("Can I connect to a local MCP server? Not directly."); Anthropic scopes local MCP/plugin support to Claude Desktop (Chat tab), Claude Code, and Cowork sessions run on your own machine -- Duet isn't in that list. "Your connectors carry over" claims for these products cover remote/cloud connectors already on your account, not local servers like this one. Use Options A/B/C above instead.
+These run on their own remote cloud VM, not on your Mac, and none of them currently supports attaching a local stdio MCP server -- the only bridge any of them documents to your own machine is GUI/computer-use screen automation, not the MCP protocol safe-things-mcp uses. OpenAI states this explicitly for Dots ("Can I connect to a local MCP server? Not directly."); Anthropic scopes local MCP/plugin support to Claude Desktop (Chat tab), Claude Code, and Cowork sessions run on your own machine -- Duet isn't in that list. "Your connectors carry over" claims for these products cover remote/cloud connectors already on your account, not local servers like this one. Use one of the install paths above instead.
 
 </details>
 
 ---
 
-## Client config
+## First-run setup
+
+Reads only need the macOS permission from [Install](#install). Writes (any `propose_*` tool, or a direct write other than `add_inbox_todo`) also need the Things auth token:
+
+1. Things > Settings > General > **Enable Things URLs** (toggle on if not already).
+2. Click **Manage** and copy the auth token.
+3. Paste it into the extension's install form, or set it as `THINGS_AUTH_TOKEN` in your client's `env` block (then restart the client).
+4. For delete, reorder and AI tagging, turn on **Allow AppleScript operations** in the extension's settings, or set `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`.
+5. Pre-create the AI flag tags (once, idempotent): ask the agent to call `ensure_ai_tags()`. This creates the `AI` parent tag and the five abstain flags (`*Unclear*`, `*Ambiguous Home*`, etc.) if any are missing.
+
+Verify: ask the agent to *"call health()"*. `things_db_access` should be `"ok"` and `url_scheme_auth_token_set` should be `true`.
 
 <details>
-<summary><strong>Claude Desktop</strong></summary>
+<summary><strong>macOS permissions -- what to expect</strong></summary>
 
-`~/Library/Application Support/Claude/claude_desktop_config.json`
+**1. Things data: "Data shared by Things and affiliated apps"**
 
-```json
-{
-  "mcpServers": {
-    "things": {
-      "command": "/absolute/path/to/safe-things-mcp/dist_signed/safe-things-mcp/safe-things-mcp",
-      "env": {
-        "THINGS_AUTH_TOKEN": "paste-token-here",
-        "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT": "1"
-      }
-    }
-  }
-}
-```
+The server reads the Things database from Things' protected App Group folder. Recent macOS versions guard that folder with their own permission (behavior below confirmed on macOS 27). It is *not* Full Disk Access, and you don't need Full Disk Access.
 
-</details>
+- **No popup.** For servers launched by an MCP client, macOS silently blocks the first read and adds an entry to **System Settings > Privacy & Security > Files & Folders**. The server replies with a message pointing you there. Turn on **Data shared by Things and affiliated apps** for that entry. No restart is needed.
+- **Which entry.** Claude Desktop launches each extension as its own process, so the permission belongs to the extension: **SafeThingsMCP**. Other clients start the server inside their own app, so the permission belongs to that app (Terminal, Cursor, "claude", ...).
+- **Why an app.** macOS only keeps this switch on for a signed app with a stable ID. For a plain command-line program, the switch flips straight back off. That's why the extension ships the server inside a small signed app instead of as a bare program.
 
-<details>
-<summary><strong>Claude Code</strong></summary>
+Troubleshooting:
 
-```bash
-claude mcp add things \
-  -e THINGS_AUTH_TOKEN=paste-token-here \
-  -e SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1 \
-  -- /absolute/path/to/safe-things-mcp/dist_signed/safe-things-mcp/safe-things-mcp
-```
+- *The switch flips back off:* you're running an extension built before v0.2.0, which shipped a bare program. Rebuild with `./build_tools/build_mcpb.sh` and reinstall.
+- *The switch is on but reads are still blocked:* the app was rebuilt with a different certificate (for example on another Mac, or after deleting both `build_tools/selfsign_*` and the `safe-things-mcp-selfsigned` certificate in your keychain). Reset the entry, use the server once so it reappears, then turn the switch on again:
+  ```bash
+  tccutil reset SystemPolicyAppDataDetailed io.github.josh000111.safe-things-mcp
+  ```
+- `health()` reports the current state in `things_db_access`.
 
-</details>
+**2. Automation: "... wants access to control Things 3"**
 
-<details>
-<summary><strong>Cursor</strong></summary>
-
-Settings > MCP > Add Server. Use the same `command` path as Claude Desktop and add an `env` block with `THINGS_AUTH_TOKEN` set to your token.
+Appears the first time an AppleScript-backed operation runs (requires `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`). It names the same app as above. Click **Allow** once; this grant persists.
 
 </details>
 
@@ -426,7 +329,7 @@ Two **separate** prompt systems sit in front of the write tools. They are unrela
 
 **For the smoothest experience, combine both:** allow-list the server (or turn on auto-accept) **and** set `SAFE_THINGS_MCP_AUTO_CONFIRM=1`. You then run friction-free for everyday adds/updates/moves while keeping a hard confirmation on the dangerous bulk operations.
 
-> The recurring **"python … would like to access data from other apps"** dialog is a *third*, OS-level prompt — see [macOS permission prompts](#first-run-setup) above. Neither auto-accept nor `AUTO_CONFIRM` affects it; the fix is the signed bundle (Option B) or Full Disk Access.
+> The macOS **"Data shared by Things and affiliated apps"** switch is a *third*, OS-level permission -- see [macOS permissions](#first-run-setup) above. Neither auto-accept nor `AUTO_CONFIRM` affects it; you turn it on once in System Settings.
 
 ---
 
@@ -501,7 +404,7 @@ Default bias: reuse existing lists. Avoid creating clutter.
 <details>
 <summary><strong>Guidance document</strong></summary>
 
-`docs/ai-tagging-guidance.md` contains the full agent-side reference:
+The agent-side reference ships inside the server (its MCP instructions and the `help_docs()` tool), so every client gets it automatically. It covers:
 
 - The 90% soft confidence anchor (criteria-based, not a numeric gate)
 - Abstain criteria checklist
@@ -600,4 +503,10 @@ V1 (read + Inbox-create) and V2 (full write parity) are complete, including AI-a
 
 **AppleScript-backed operations** (require `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`): delete to Trash, reorder, and all AI tagging.
 
-For implementation details, see `docs/safe-things-mcp-V2-technical-architecture-and-implementation-plan.md`.
+For implementation details, see [Architecture](#architecture) above.
+
+---
+
+## License
+
+MIT -- see [LICENSE](LICENSE).
