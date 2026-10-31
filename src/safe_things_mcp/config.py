@@ -8,6 +8,9 @@ from pathlib import Path
 STATE_DIR = Path(os.environ.get("SAFE_THINGS_MCP_STATE_DIR", Path.home() / ".safe-things-mcp"))
 STATE_DB_PATH = STATE_DIR / "state.db"
 
+THINGS_GROUP_CONTAINER = Path(
+    "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac"
+).expanduser()
 THINGS_DB_GLOB = (
     "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/"
     "ThingsData-*/Things Database.thingsdatabase/main.sqlite"
@@ -16,6 +19,26 @@ THINGS_DB_LEGACY_PATH = Path(
     "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/"
     "Things Database.thingsdatabase/main.sqlite"
 ).expanduser()
+
+# macOS silently denies the container (no popup) until the user flips a switch,
+# so the generic sqlite "unable to open database file" is useless to them.
+PERMISSION_GUIDANCE = (
+    "macOS is blocking access to the Things database. Open System Settings > "
+    "Privacy & Security > Files & Folders, find the app running this server "
+    '("SafeThingsMCP" if you installed the Claude Desktop extension; otherwise '
+    'your terminal, editor or the "claude" app) and turn on "Data shared by '
+    'Things and affiliated apps". macOS never shows a popup for this, so that '
+    "switch is the only way to allow it. No restart needed."
+)
+NOT_FOUND_GUIDANCE = (
+    "Things 3 data was not found at "
+    "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac. "
+    "Install Things 3 for Mac and open it at least once."
+)
+
+
+class ThingsDBAccessError(RuntimeError):
+    """The Things database can't be reached; the message is user-facing guidance."""
 
 
 def resolve_things_db_path() -> Path:
@@ -26,6 +49,43 @@ def resolve_things_db_path() -> Path:
         return Path(override)
     match = next(glob.iglob(os.path.expanduser(THINGS_DB_GLOB)), None)
     return Path(match) if match else THINGS_DB_LEGACY_PATH
+
+
+def things_db_access_problem() -> str | None:
+    """Return None if the Things DB is readable, else user-facing guidance on why not."""
+    override = os.environ.get("THINGS_DB_PATH")
+    try:
+        if not override:
+            # Listing the container is what macOS denies first; it tells
+            # "blocked" apart from "Things not installed".
+            os.listdir(THINGS_GROUP_CONTAINER)
+        path = resolve_things_db_path()
+        open(path, "rb").close()
+    except (FileNotFoundError, NotADirectoryError):
+        if override:
+            return f"THINGS_DB_PATH is set to {override} but no database was found there."
+        return NOT_FOUND_GUIDANCE
+    except PermissionError:
+        if override:
+            return f"Permission denied reading THINGS_DB_PATH ({override}). " + PERMISSION_GUIDANCE
+        return PERMISSION_GUIDANCE
+    except OSError as exc:
+        return f"Could not open the Things database: {exc}"
+    return None
+
+
+def require_things_db_path() -> Path:
+    """Return the Things DB path, or raise ThingsDBAccessError with actionable guidance."""
+    path = resolve_things_db_path()
+    try:
+        # Open, not stat: macOS can allow stat yet deny reading, which would let
+        # sqlite's unhelpful "unable to open database file" through.
+        open(path, "rb").close()
+        return path
+    except OSError:
+        pass  # fall through to diagnosis
+    problem = things_db_access_problem()
+    raise ThingsDBAccessError(problem or f"Things database not found at {path}")
 
 
 THINGS_AUTH_TOKEN = os.environ.get("THINGS_AUTH_TOKEN")

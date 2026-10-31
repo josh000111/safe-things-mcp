@@ -51,6 +51,9 @@ def test_empty_env_var_is_ignored(monkeypatch, tmp_path):
 
 def test_repo_kw_filepath_tracks_resolution_changes(monkeypatch, tmp_path):
     legacy = _point_at(monkeypatch, tmp_path)
+    legacy.parent.mkdir(parents=True)
+    legacy.touch()  # _kw() now refuses a nonexistent path (guidance error)
     assert things_repo._kw()["filepath"] == str(legacy)
+    legacy.unlink()
     db = _make_db(tmp_path, "XXXXX")
     assert things_repo._kw()["filepath"] == str(db)

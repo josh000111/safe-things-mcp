@@ -14,6 +14,7 @@ from ..config import (
     STATE_DB_PATH,
     THINGS_AUTH_TOKEN,
     resolve_things_db_path,
+    things_db_access_problem,
 )
 from ..models import HealthReport
 from ..services import things_repo
@@ -120,9 +121,13 @@ def register(mcp: FastMCP) -> None:
             reorder_available = _reorder_command_available()
 
         db_path = resolve_things_db_path()
-        return HealthReport(
+        try:
+            db_exists = db_path.exists()
+        except OSError:
+            db_exists = False  # EPERM under macOS denial must not crash health()
+        report = HealthReport(
             things_db_path=str(db_path),
-            things_db_exists=db_path.exists(),
+            things_db_exists=db_exists,
             things_app_running=_things_app_running(),
             things_py_version=_things_py_version(),
             state_db_path=str(STATE_DB_PATH),
@@ -133,6 +138,9 @@ def register(mcp: FastMCP) -> None:
             applescript_authorized=_applescript_authorized(),
             reorder_command_available=reorder_available,
         ).model_dump()
+        # Added outside HealthReport so the model's existing fields stay untouched.
+        report["things_db_access"] = things_db_access_problem() or "ok"
+        return report
 
     @mcp.tool()
     def recent_undo_log(limit: int = 20) -> list[dict]:
