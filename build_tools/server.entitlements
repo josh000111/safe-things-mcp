@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- PyInstaller's bundled libs are ad-hoc signed (no Team ID); library validation would refuse them. -->
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <!-- The server spawns osascript to control Things 3; carrying this too avoids depending on
+       which process in the chain macOS checks for Apple Events permission. -->
+  <key>com.apple.security.automation.apple-events</key><true/>
+</dict>
+</plist>

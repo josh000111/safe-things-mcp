@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- The launcher is the TCC responsible process for the osascript the server spawns to control
+       Things 3. Under hardened runtime macOS silently denies Apple Events unless the responsible
+       process carries this entitlement. Nothing else is granted: no library-validation or
+       dyld-environment exceptions. -->
+  <key>com.apple.security.automation.apple-events</key><true/>
+</dict>
+</plist>

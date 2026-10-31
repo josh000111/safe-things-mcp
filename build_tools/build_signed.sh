@@ -74,6 +74,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 ditto "$REPO_DIR/dist_signed/safe-things-mcp" "$APP/Contents/Resources/server"
 clang -O2 -Wall -Wextra -Werror -mmacosx-version-min=12.0 \
+  -framework Security -framework CoreFoundation \
   -o "$APP/Contents/MacOS/safe-things-mcp" "$BUILD/app_launcher.c"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -88,6 +89,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>LSUIElement</key><true/>
+  <key>NSAppleEventsUsageDescription</key><string>SafeThingsMCP controls Things 3 for delete-to-Trash, reordering and AI tagging, only when you enable AppleScript operations.</string>
 </dict>
 </plist>
 PLIST
@@ -100,11 +102,21 @@ if [ -n "$(find "$APP" -type l)" ]; then
 fi
 
 # 4) Sign inner code first, then the bundle (no --deep).
+#    Hardened runtime (--options runtime) makes dyld ignore DYLD_* variables, so nobody
+#    can inject a dylib into a process that holds the Things permission.
 echo "==> Signing the app"
-codesign --force --sign "$IDENTITY" "$APP/Contents/Resources/server/safe-things-mcp"
-codesign --force --sign "$IDENTITY" "$APP"
+ENTITLEMENTS="$BUILD/server.entitlements"
+APP_ENTITLEMENTS="$BUILD/app.entitlements"
+plutil -lint "$ENTITLEMENTS"
+plutil -lint "$APP_ENTITLEMENTS"
+# Only the server needs disable-library-validation: PyInstaller's bundled libs are ad-hoc signed.
+codesign --force --options runtime --entitlements "$ENTITLEMENTS" --sign "$IDENTITY" \
+  "$APP/Contents/Resources/server/safe-things-mcp"
+# The launcher is the TCC responsible process, so it needs the Apple Events entitlement
+# for the server's osascript calls to work under hardened runtime.
+codesign --force --options runtime --entitlements "$APP_ENTITLEMENTS" --sign "$IDENTITY" "$APP"
 codesign --verify --strict --verbose=2 "$APP"
-codesign -dv --verbose=2 "$APP" 2>&1 | grep -E "Identifier|Authority" || true
+codesign -dv --verbose=2 "$APP" 2>&1 | grep -E "Identifier|Authority|flags=" || true
 
 echo
 echo "==> Done. Signed app:"

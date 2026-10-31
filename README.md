@@ -133,11 +133,8 @@ The server reads the Things database from Things' protected App Group folder. Re
 
 Troubleshooting:
 
-- *The switch flips back off:* you're running an extension built before v0.2.0, which shipped a bare program. Rebuild with `./build_tools/build_mcpb.sh` and reinstall.
-- *The switch is on but reads are still blocked:* the app was rebuilt with a different certificate (for example on another Mac, or after deleting both `build_tools/selfsign_*` and the `safe-things-mcp-selfsigned` certificate in your keychain). Reset the entry, use the server once so it reappears, then turn the switch on again:
-  ```bash
-  tccutil reset SystemPolicyAppDataDetailed io.github.josh000111.safe-things-mcp
-  ```
+- *The switch flips back off:* you're running an extension built before v0.2.0, which shipped a bare program. Rebuild with `./build_tools/build_mcpb.sh` and reinstall. You can then remove the old `safe-things-mcp` entry: select it in Files & Folders and click **–**.
+- *The switch is on but reads are still blocked:* the app was rebuilt with a different certificate (for example on another Mac, or after deleting both `build_tools/selfsign_*` and the `safe-things-mcp-selfsigned` certificate in your keychain). Select **SafeThingsMCP** in Files & Folders and click **–** to remove the stale entry, use the server once so it reappears, then turn the switch on again.
 - `health()` reports the current state in `things_db_access`.
 
 **2. Automation: "... wants access to control Things 3"**

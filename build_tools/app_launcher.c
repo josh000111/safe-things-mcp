@@ -9,7 +9,13 @@
  * It must spawn, never exec: exec would replace the app's code identity with the
  * bare server binary, which macOS keys by file path, and the grant would not
  * apply. It also must not disclaim responsibility for the child.
+ *
+ * Because it holds that permission, it also (1) refuses to start if its own bundle
+ * was modified after signing and (2) strips loader/Python/PyInstaller injection
+ * variables from the child's environment.
  */
+#include <CoreFoundation/CoreFoundation.h>
+#include <Security/Security.h>
 #include <errno.h>
 #include <limits.h>
 #include <mach-o/dyld.h>
@@ -35,6 +41,71 @@ static void forward_signal(int sig) {
     errno = saved_errno;
 }
 
+/*
+ * The app holds the user's Things permission, so it must not start from files that
+ * changed after signing. kSecCSStrictValidate plus default flags also checks the
+ * resource seal (added/removed/modified files under Contents/Resources).
+ *
+ * Limits: this catches files modified BEFORE launch (offline tampering). It does not
+ * protect files swapped while the server is running (PyInstaller loads some libraries
+ * lazily, after this check). It is defense in depth, not runtime integrity.
+ * Returns an OSStatus, 0 = valid.
+ */
+static OSStatus verify_own_signature(void) {
+    SecCodeRef self = NULL;
+    SecStaticCodeRef static_code = NULL;
+    OSStatus st = SecCodeCopySelf(kSecCSDefaultFlags, &self);
+    if (st == errSecSuccess) {
+        st = SecCodeCopyStaticCode(self, kSecCSDefaultFlags, &static_code);
+    }
+    if (st == errSecSuccess) {
+        st = SecStaticCodeCheckValidity(static_code, kSecCSDefaultFlags | kSecCSStrictValidate, NULL);
+    }
+    if (static_code != NULL) {
+        CFRelease(static_code);
+    }
+    if (self != NULL) {
+        CFRelease(self);
+    }
+    return st;
+}
+
+/*
+ * True for variables that change what code the child loads: dynamic-loader
+ * (DYLD_*, LD_*), the Python interpreter (PYTHON*), and the PyInstaller bootloader
+ * (_PYI_*, PYINSTALLER_*). Matched by prefix on the name, so new variants in these
+ * families are covered without maintaining a list.
+ */
+static int is_blocked_env(const char *entry) {
+    static const char *const prefixes[] = {"DYLD_", "LD_", "PYTHON", "_PYI_", "PYINSTALLER_"};
+    for (size_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
+        if (strncmp(entry, prefixes[i], strlen(prefixes[i])) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Heap copy of environ minus blocked variables; NULL on allocation failure. */
+static char **scrubbed_environ(void) {
+    size_t count = 0;
+    while (environ != NULL && environ[count] != NULL) {
+        count++;
+    }
+    char **out = calloc(count + 1, sizeof(char *));
+    if (out == NULL) {
+        return NULL;
+    }
+    size_t k = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (!is_blocked_env(environ[i])) {
+            out[k++] = environ[i];
+        }
+    }
+    out[k] = NULL;
+    return out;
+}
+
 /* Absolute, symlink-free path of this executable; NULL on failure. */
 static char *self_path(char *out) {
     char raw[PATH_MAX];
@@ -47,6 +118,14 @@ static char *self_path(char *out) {
 
 int main(int argc, char **argv) {
     (void)argc;
+    OSStatus sig_status = verify_own_signature();
+    if (sig_status != errSecSuccess) {
+        fprintf(stderr,
+                "safe-things-mcp launcher: app signature check failed (OSStatus %d); "
+                "refusing to start a modified app. Reinstall the extension.\n",
+                (int)sig_status);
+        return 126;
+    }
     char exe[PATH_MAX];
     if (self_path(exe) == NULL) {
         fprintf(stderr, "safe-things-mcp launcher: cannot resolve own path: %s\n", strerror(errno));
@@ -104,9 +183,15 @@ int main(int argc, char **argv) {
     posix_spawnattr_setsigmask(&attr, &old);
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
 
+    char **child_env = scrubbed_environ();
+    if (child_env == NULL) {
+        fprintf(stderr, "safe-things-mcp launcher: out of memory\n");
+        return 127;
+    }
     pid_t pid = 0;
-    int rc = posix_spawn(&pid, server, NULL, &attr, argv, environ);
+    int rc = posix_spawn(&pid, server, NULL, &attr, argv, child_env);
     posix_spawnattr_destroy(&attr);
+    free(child_env);
     if (rc != 0) {
         fprintf(stderr, "safe-things-mcp launcher: cannot start %s: %s\n", server, strerror(rc));
         return 127;
