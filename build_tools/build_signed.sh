@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Build a signed, standalone safe-things-mcp binary with a STABLE code identity.
+# Build SafeThingsMCP.app: the PyInstaller server wrapped in a signed app bundle.
 #
-# WHY: macOS only "remembers" the "would like to access data from other apps"
-# permission for a program that has a stable, signed identity. The plain Python
-# interpreter is ad-hoc signed (effectively anonymous), so macOS re-prompts every
-# launch. Freezing the server into one binary and signing it with a reused
-# certificate gives it a stable identity macOS can remember.
-#
-# IMPORTANT: this only stops the recurring prompt on MCP clients that launch the
-# server DIRECTLY (Cursor, VS Code, Codex, Claude Code CLI). Claude Desktop
-# launches add-ons through a `disclaimer` middleman that prevents macOS from
-# remembering the grant for ANY add-on regardless of signing — see the README
-# "macOS Permission Prompts" section (upstream bug: anthropics/claude-code#36832).
+# WHY: Things 3's data lives in an App Group container protected by macOS TCC
+# ("Data shared by Things and affiliated apps"). macOS never shows a popup for it:
+# the first read is silently denied and an entry appears in System Settings >
+# Privacy & Security > Files & Folders. For a bare binary that entry is keyed by
+# file path and the toggle will not stay on; for a signed .app bundle it is keyed
+# by bundle ID, so the toggle sticks. The grant is tied to BUNDLE_ID plus this
+# Mac's self-signed certificate: change either and users must re-enable it once.
+# User step: enable "Data shared by Things and affiliated apps" for "SafeThingsMCP".
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,10 +16,18 @@ BUILD="$REPO_DIR/build_tools"
 CERT="$BUILD/selfsign_cert.pem"
 KEY="$BUILD/selfsign_key.pem"
 P12="$BUILD/selfsign.p12"
+APP_NAME="SafeThingsMCP"  # matches the .app file name, which is what System Settings shows
+APP_DIR_NAME="SafeThingsMCP.app"
+# Changing BUNDLE_ID or the certificate forces every user to re-enable the toggle.
+BUNDLE_ID="io.github.josh000111.safe-things-mcp"
 IDENTITY="safe-things-mcp-selfsigned"
 P12_PASS="safe-things-mcp-build"
+APP="$REPO_DIR/dist_signed/$APP_DIR_NAME"
 
 cd "$REPO_DIR"
+
+# The native launcher is compiled with clang, which ships with the Command Line Tools.
+xcode-select -p >/dev/null 2>&1 || { echo "Install Xcode Command Line Tools first: xcode-select --install"; exit 1; }
 
 # 1) Ensure a STABLE self-signed code-signing certificate exists + is importable.
 #    Reusing the same cert keeps the signing identity constant across rebuilds,
@@ -35,12 +40,18 @@ if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
     -addext "basicConstraints=critical,CA:FALSE" \
     -addext "keyUsage=critical,digitalSignature"
 fi
-if ! security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
+# Look for a usable signing identity (cert + private key), not just a cert. Captured
+# into a variable first: piping into `grep -q` under pipefail can false-negative.
+EXISTING_IDS="$(security find-identity -p codesigning 2>/dev/null || true)"
+if [[ "$EXISTING_IDS" != *"\"$IDENTITY\""* ]]; then
   echo "==> Importing certificate into login keychain"
-  # -legacy: modern OpenSSL (3.x+) defaults to a PKCS12 MAC/cipher that macOS
-  # Keychain's older parser rejects with "MAC verification failed" even with
-  # the correct password. -legacy forces the RC2/SHA1 format Keychain expects.
-  openssl pkcs12 -export -legacy -inkey "$KEY" -in "$CERT" -out "$P12" \
+  # Keychain only reads the legacy PKCS12 format (newer formats fail with "MAC
+  # verification failed"). OpenSSL 3+ needs -legacy to write it; macOS's built-in
+  # LibreSSL writes it by default and rejects the flag, so detect support.
+  LEGACY_FLAG=""
+  case "$(openssl pkcs12 -help 2>&1 || true)" in *-legacy*) LEGACY_FLAG="-legacy" ;; esac
+  # shellcheck disable=SC2086  # intentionally unquoted: empty means no flag
+  openssl pkcs12 -export $LEGACY_FLAG -inkey "$KEY" -in "$CERT" -out "$P12" \
     -passout "pass:$P12_PASS" -name "$IDENTITY"
   security import "$P12" -k "$HOME/Library/Keychains/login.keychain-db" \
     -P "$P12_PASS" -T /usr/bin/codesign -A
@@ -56,43 +67,50 @@ uv run --with pyinstaller pyinstaller \
   --distpath "$REPO_DIR/dist_signed" --workpath "$BUILD/pyi_work" --specpath "$BUILD" \
   "$BUILD/freeze_entry.py"
 
-# 3) Sign with the stable identity.
-echo "==> Signing the binary"
-codesign --force --sign "$IDENTITY" "$REPO_DIR/dist_signed/safe-things-mcp/safe-things-mcp"
-codesign -dv --verbose=2 "$REPO_DIR/dist_signed/safe-things-mcp/safe-things-mcp" 2>&1 \
-  | grep -E "Authority|Signature|Identifier" || true
+# 3) Assemble the app bundle around the onedir build.
+echo "==> Assembling $APP_DIR_NAME"
+VERSION="$(uv run python -c 'import tomllib;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+ditto "$REPO_DIR/dist_signed/safe-things-mcp" "$APP/Contents/Resources/server"
+clang -O2 -Wall -Wextra -Werror -mmacosx-version-min=12.0 \
+  -o "$APP/Contents/MacOS/safe-things-mcp" "$BUILD/app_launcher.c"
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
+  <key>CFBundleName</key><string>$APP_NAME</string>
+  <key>CFBundleDisplayName</key><string>$APP_NAME</string>
+  <key>CFBundleExecutable</key><string>safe-things-mcp</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+plutil -lint "$APP/Contents/Info.plist"
 
-BIN="$REPO_DIR/dist_signed/safe-things-mcp/safe-things-mcp"
-cat <<EOF
+# A symlink would not survive the .mcpb zip round-trip and would break the seal.
+if [ -n "$(find "$APP" -type l)" ]; then
+  echo "ERROR: $APP contains symlinks; the signature would not survive packing."
+  exit 1
+fi
 
-==> Done. Signed program:
-    $BIN
+# 4) Sign inner code first, then the bundle (no --deep).
+echo "==> Signing the app"
+codesign --force --sign "$IDENTITY" "$APP/Contents/Resources/server/safe-things-mcp"
+codesign --force --sign "$IDENTITY" "$APP"
+codesign --verify --strict --verbose=2 "$APP"
+codesign -dv --verbose=2 "$APP" 2>&1 | grep -E "Identifier|Authority" || true
 
-Paste this into your client config (Claude Desktop:
-~/Library/Application Support/Claude/claude_desktop_config.json), replacing
-PASTE-YOUR-THINGS-TOKEN with the token from Things -> Settings -> General -> Manage:
-
-{
-  "mcpServers": {
-    "safe-things-mcp": {
-      "command": "$BIN",
-      "env": {
-        "THINGS_AUTH_TOKEN": "PASTE-YOUR-THINGS-TOKEN",
-        "SAFE_THINGS_MCP_ALLOW_APPLESCRIPT": "1"
-      }
-    }
-  }
-}
-
-Then fully quit and reopen the client. You'll get ONE "safe-things-mcp would like to
-access data from other apps" prompt -- click Allow.
-
-- Direct-launch clients (Cursor, VS Code, Codex): the approval should be
-  remembered, so you won't be asked again. If it DOES recur, trust the
-  certificate once:
-      sudo security add-trusted-cert -d -r trustRoot -p codeSign \\
-          -k /Library/Keychains/System.keychain "$CERT"
-- Claude Desktop: the prompt recurs every launch regardless of signing
-  (upstream bug anthropics/claude-code#36832) -- but it will at least say
-  "safe-things-mcp" so you know what you're approving.
-EOF
+echo
+echo "==> Done. Signed app:"
+echo "    $APP"
+# build_mcpb.sh calls this script; only point at it when run on its own.
+if [ -z "${SAFE_THINGS_MCP_CALLED_BY_MCPB:-}" ]; then
+  echo
+  echo "Next: ./build_tools/build_mcpb.sh   (packs it for Claude Desktop)"
+fi

@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "safe-things-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local MCP server for Things 3 on macOS: full reads plus Inbox-only writes via the Things URL scheme, with a propose/confirm safety layer and undo.",
   "author": {
     "name": "josh000111"
@@ -12,11 +12,14 @@
   },
   "homepage": "https://github.com/josh000111/safe-things-mcp",
   "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin"]
+  },
   "server": {
     "type": "binary",
-    "entry_point": "server/safe-things-mcp",
+    "entry_point": "server/SafeThingsMCP.app/Contents/MacOS/safe-things-mcp",
     "mcp_config": {
-      "command": "${__dirname}/server/safe-things-mcp",
+      "command": "${__dirname}/server/SafeThingsMCP.app/Contents/MacOS/safe-things-mcp",
       "args": [],
       "env": {
         "THINGS_AUTH_TOKEN": "${user_config.things_auth_token}",
