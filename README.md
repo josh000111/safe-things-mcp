@@ -296,7 +296,7 @@ Most write tools use a two-phase pattern:
 
 Pending actions expire after 5 minutes.
 
-**Skipping the confirm round-trip:** set `SAFE_THINGS_MCP_AUTO_CONFIRM=1` in the env block. `propose_*` tools will execute immediately and return a summary instead of a preview. The following operations always require an explicit `confirm_action()` regardless of this flag:
+**Skipping the confirm round-trip:** turn on **Auto-confirm proposed writes** in the extension's settings, or set `SAFE_THINGS_MCP_AUTO_CONFIRM=1` in the env block. `propose_*` tools will execute immediately and return a summary instead of a preview. The following operations always require an explicit `confirm_action()` regardless of this flag:
 
 - `propose_delete_project` — cascades to all tasks inside the project
 - `propose_bulk_complete`, `propose_bulk_cancel`, `propose_bulk_move`, `propose_bulk_update`
@@ -306,6 +306,16 @@ Pending actions expire after 5 minutes.
 - `propose_move_under_ai_heading`
 
 `propose_delete_todo` and `propose_delete_heading` **do** respect `AUTO_CONFIRM=1` — single-item deletes go to Things Trash and are reversible via `undo()`, so explicit confirmation is not forced when the user has already named the item. `propose_bulk_add_todo` also respects `AUTO_CONFIRM=1` (additive, low risk).
+
+### Built-in safety checks
+
+Every preview names the items involved (to-do, project, heading and area titles), so you can see exactly what will change before you approve it. On top of that, the server refuses an action before anything is written when it is aimed at the wrong thing:
+
+- **Wrong kind of item.** Tools that act on a to-do refuse a project, heading or area (so "delete to-do" can never trash a whole project). Project tools refuse anything that isn't a project, and destinations must be a real list, project or area.
+- **Headings.** Heading tools only act on a heading inside the project you named, and confirming acts on exactly the heading the preview showed.
+- **AI tags.** `propose_delete_ai_tag` only deletes AI tags (tags under the `AI` parent), and refuses if two tags share the name or the tag has sub-tags. Its preview counts every item carrying the tag (open, completed and trashed to-dos, projects and areas), and `undo()` puts the tag back on all of them without reverting tag changes you made since.
+- **Checklists.** `propose_replace_checklist` refuses unless it can show you the items it would remove.
+- **Unreadable database.** If macOS is blocking access, you get the steps to allow it instead of a preview.
 
 ---
 

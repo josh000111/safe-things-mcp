@@ -39,14 +39,14 @@
     "allow_applescript": {
       "type": "boolean",
       "title": "Allow AppleScript operations",
-      "description": "Enables delete-to-Trash, reorder, and AI tagging via AppleScript. Triggers a one-time macOS automation permission prompt.",
+      "description": "Enables Reorder (Todo’s, Headings, etc), AI Tagging and delete-to-Trash, via AppleScript. Triggers a one-time macOS automation permission prompt.",
       "required": false,
       "default": false
     },
     "auto_confirm": {
       "type": "boolean",
       "title": "Auto-confirm proposed writes",
-      "description": "When on, this setting skips the confirm step for propose_* tools. You will not be asked to confirm the proposed actions the Agent is about to take in Things, before the Agent takes them. Destructive and bulk actions always require explicit confirmation regardless of this setting.",
+      "description": "When on, this setting skips the confirm step for propose_* tools. You will not be asked to confirm the proposed actions the Agent is about to take in Things, before the Agent takes them. Bulk actions and the most destructive ones (deleting a project or AI tag, replacing a checklist) always require explicit confirmation regardless of this setting. Single to-do or heading deletes go to Things Trash and can be undone. See the README for the full list.",
       "required": false,
       "default": false
     }
