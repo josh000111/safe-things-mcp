@@ -45,7 +45,7 @@ def make_preview(payload: dict) -> str:
         )
     parts = [
         f"Add dummy heading {dummy_title!r} to project "
-        f"{_project_label(project_id, proj)}",
+        f"{_project_label(project_id, proj, payload)}",
         "(URL-scheme only — position not guaranteed)",
     ]
     if payload.get("after_todo_id"):
@@ -56,7 +56,11 @@ def make_preview(payload: dict) -> str:
     return " ".join(parts)
 
 
-def _project_label(project_id: str, proj: dict) -> str:
+def _project_label(project_id: str, proj: dict, payload: dict) -> str:
+    # Payloads staged before names were looked up at propose time carry no
+    # project_title; fall back to the live row, always with its ID as before.
+    if "project_title" in payload:
+        return pn.fmt(project_id, payload, "project_title")
     title = proj.get("title")
     return f"'{title}' ({project_id})" if title else project_id
 

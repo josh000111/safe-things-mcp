@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import things
 
@@ -169,6 +169,73 @@ def tag_rows(tag_title: str) -> list[dict[str, Any]]:
                 (tag_title,),
             ).fetchall()
         ]
+    finally:
+        conn.close()
+
+
+# Kind -> WHERE clause over TMTask (type codes: 0 to-do, 1 project, 2 heading).
+# Recurring templates (rt1_recurrenceRule set) are skipped so a repeating to-do
+# never counts as its own twin. Headings count native ones (type 2) plus
+# dummy-heading to-dos (``__NAME__`` titles), whether directly in the project
+# or nested under one of its native headings (their ``project`` is then NULL).
+_LIVE_TASK_WHERE = {
+    "to-do": "type = 0 AND rt1_recurrenceRule IS NULL",
+    "heading": (
+        "(type = 2 OR (type = 0 AND title LIKE '\\_\\_%' ESCAPE '\\')) "
+        "AND (project = ? OR heading IN (SELECT uuid FROM TMTask WHERE type = 2 AND project = ?))"
+    ),
+}
+# Old SQLite caps bound variables at 999; "destination" binds each title twice
+# (tasks + areas) and "heading" two project uuids on top, so 400 fits all kinds.
+_LIVE_CHUNK = 400
+
+
+def live_uuids_by_title(
+    kind: str, titles: Iterable[str], project_uuid: str | None = None
+) -> dict[str, set[str]]:
+    """``{title: {uuid, ...}}`` of the non-trashed items of ``kind`` carrying
+    each of ``titles`` (titles with no live item are absent).
+
+    ``kind`` is "to-do", "heading" (needs ``project_uuid``; only that project's
+    headings), or "destination" (projects AND areas together, so a project and
+    an area sharing a name clash). Status is ignored (open, completed and
+    canceled all count) and matching is exact. Callers flag an item as
+    ambiguous when the set holds a uuid other than its own, which also catches
+    a previewed item that is itself trashed. One query per call (chunked only
+    for huge batches). Read-only; raises on ANY failure, so a read error is
+    never mistaken for "not ambiguous".
+    """
+    wanted = list(dict.fromkeys(t for t in titles if t))
+    if kind not in _LIVE_TASK_WHERE and kind != "destination":
+        raise ValueError(f"Unknown item kind {kind!r}")
+    if kind == "heading" and not project_uuid:
+        raise ValueError("kind='heading' requires project_uuid")
+    if not wanted:
+        return {}
+    path = require_things_db_path()
+    conn = sqlite3.connect(f"{Path(path).as_uri()}?mode=ro", uri=True)
+    try:
+        out: dict[str, set[str]] = {}
+        for i in range(0, len(wanted), _LIVE_CHUNK):
+            chunk = wanted[i:i + _LIVE_CHUNK]
+            marks = ",".join("?" * len(chunk))
+            if kind == "destination":
+                sql = (
+                    "SELECT title, uuid FROM TMTask WHERE trashed = 0 AND type = 1 "
+                    f"AND rt1_recurrenceRule IS NULL AND title IN ({marks}) "
+                    f"UNION ALL SELECT title, uuid FROM TMArea WHERE title IN ({marks})"
+                )
+                params: list[Any] = [*chunk, *chunk]
+            else:
+                sql = (
+                    f"SELECT title, uuid FROM TMTask WHERE trashed = 0 AND {_LIVE_TASK_WHERE[kind]} "
+                    f"AND title IN ({marks})"
+                )
+                # the project placeholders precede the title placeholders in the SQL
+                params = [project_uuid, project_uuid, *chunk] if kind == "heading" else chunk
+            for title, uuid in conn.execute(sql, params).fetchall():
+                out.setdefault(title, set()).add(uuid)
+        return out
     finally:
         conn.close()
 

@@ -103,7 +103,7 @@ async def propose_add_todo(
         checklist=checklist,
     )
     payload = payload_model.model_dump()
-    payload.update(pn.for_destination(list_id))
+    pn.merge(payload, pn.for_destination(list_id))
     preview = handlers.add_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.add_todo.KIND, payload=payload, preview=preview
@@ -141,7 +141,7 @@ async def propose_update_todo(
     # works correctly. Empty string / empty list survive (they mean
     # "clear"), but None ("don't touch") gets stripped.
     payload = payload_model.model_dump(exclude_none=True)
-    payload.update(pn.for_todo(todo_id))
+    pn.merge(payload, pn.for_todo(todo_id))
     preview = handlers.update_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.update_todo.KIND, payload=payload, preview=preview
@@ -170,8 +170,8 @@ async def propose_move_todo(todo_id: str, target: str) -> dict:
         )
     payload_model = ProposeMoveTodoInput(todo_id=todo_id, target=target)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todo(todo_id))
-    payload.update(pn.for_destination(target))
+    pn.merge(payload, pn.for_todo(todo_id))
+    pn.merge(payload, pn.for_destination(target))
     preview = handlers.move_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.move_todo.KIND, payload=payload, preview=preview
@@ -200,7 +200,7 @@ async def propose_delete_todo(todo_id: str) -> dict:
         )
     payload_model = ProposeDeleteTodoInput(todo_id=todo_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todo(todo_id))
+    pn.merge(payload, pn.for_todo(todo_id))
     preview = handlers.delete_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_todo.KIND, payload=payload, preview=preview
@@ -271,9 +271,9 @@ async def propose_add_project(
         member_todo_ids=member_todo_ids,
     )
     payload = payload_model.model_dump()
-    payload.update(pn.for_area(area_id))
+    pn.merge(payload, pn.for_area(area_id))
     if member_todo_ids:
-        payload.update(pn.for_todos(member_todo_ids))
+        pn.merge(payload, pn.for_todos(member_todo_ids))
     preview = handlers.add_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.add_project.KIND, payload=payload, preview=preview
@@ -306,8 +306,8 @@ async def propose_update_project(
         area_id=area_id,
     )
     payload = payload_model.model_dump(exclude_none=True)
-    payload.update(pn.for_project(project_id))
-    payload.update(pn.for_area(area_id))
+    pn.merge(payload, pn.for_project(project_id))
+    pn.merge(payload, pn.for_area(area_id))
     preview = handlers.update_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.update_project.KIND, payload=payload, preview=preview
@@ -325,7 +325,7 @@ async def propose_bulk_complete(todo_ids: list[str]) -> dict:
     """
     payload_model = ProposeBulkCompleteInput(todo_ids=todo_ids)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todos(todo_ids))
+    pn.merge(payload, pn.for_todos(todo_ids))
     preview = handlers.bulk_complete.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_complete.KIND, payload=payload, preview=preview
@@ -343,7 +343,7 @@ async def propose_bulk_cancel(todo_ids: list[str], group_id: str | None = None) 
     """
     payload_model = ProposeBulkCancelInput(todo_ids=todo_ids, group_id=group_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todos(todo_ids))
+    pn.merge(payload, pn.for_todos(todo_ids))
     preview = handlers.bulk_delete.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_delete.KIND, payload=payload, preview=preview
@@ -395,8 +395,8 @@ async def propose_bulk_move(
         )
     payload_model = ProposeBulkMoveInput(todo_ids=todo_ids, target=target, group_id=group_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todos(todo_ids))
-    payload.update(pn.for_destination(target))
+    pn.merge(payload, pn.for_todos(todo_ids))
+    pn.merge(payload, pn.for_destination(target))
     preview = handlers.bulk_move.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_move.KIND, payload=payload, preview=preview
@@ -430,7 +430,7 @@ async def propose_bulk_update(
         group_id=group_id,
     )
     payload = payload_model.model_dump(exclude_none=True)
-    payload.update(pn.for_todos(todo_ids))
+    pn.merge(payload, pn.for_todos(todo_ids))
     preview = handlers.bulk_update.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_update.KIND, payload=payload, preview=preview
@@ -458,7 +458,7 @@ async def propose_bulk_delete_todo(
         )
     payload_model = ProposeBulkDeleteInput(todo_ids=todo_ids, group_id=group_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todos(todo_ids))
+    pn.merge(payload, pn.for_todos(todo_ids))
     preview = handlers.bulk_delete_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_delete_todo.KIND, payload=payload, preview=preview
@@ -486,7 +486,7 @@ async def propose_bulk_delete_heading(
         group_id=group_id,
     )
     payload = payload_model.model_dump()
-    payload.update(pn.for_headings(project_id, heading_ids_or_names, "delete"))
+    pn.merge(payload, pn.for_headings(project_id, heading_ids_or_names, "delete"))
     preview = handlers.bulk_delete_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_delete_heading.KIND, payload=payload, preview=preview
@@ -529,7 +529,7 @@ async def propose_bulk_add_todo(
         preserve_order=preserve_order,
     )
     payload = payload_model.model_dump()
-    payload.update(pn.for_destination(list_id))
+    pn.merge(payload, pn.for_destination(list_id))
     preview = handlers.bulk_add_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.bulk_add_todo.KIND, payload=payload, preview=preview
@@ -544,7 +544,7 @@ async def propose_cancel_todo(todo_id: str) -> dict:
     """
     payload_model = ProposeCancelTodoInput(todo_id=todo_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todo(todo_id))
+    pn.merge(payload, pn.for_todo(todo_id))
     preview = handlers.cancel_todo.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.cancel_todo.KIND, payload=payload, preview=preview
@@ -559,7 +559,7 @@ async def propose_cancel_project(project_id: str) -> dict:
     """
     payload_model = ProposeCancelProjectInput(project_id=project_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_project(project_id))
+    pn.merge(payload, pn.for_project(project_id))
     preview = handlers.cancel_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.cancel_project.KIND, payload=payload, preview=preview
@@ -583,7 +583,7 @@ async def propose_delete_project(project_id: str) -> dict:
         )
     payload_model = ProposeDeleteProjectInput(project_id=project_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_project(project_id))
+    pn.merge(payload, pn.for_project(project_id))
     preview = handlers.delete_project.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_project.KIND, payload=payload, preview=preview
@@ -618,9 +618,10 @@ async def propose_add_heading(
         project_id=project_id, name=name, after_todo_id=after_todo_id, group_id=group_id
     )
     payload = payload_model.model_dump()
-    pn.for_project(project_id)  # raises if project_id is a to-do/heading, not a project
+    # for_project raises if project_id is a to-do/heading, not a project
+    pn.merge(payload, pn.for_project(project_id))
     if after_todo_id:
-        payload.update({"after_todo_title": pn.todo_title(after_todo_id)})
+        pn.merge(payload, pn.for_after_todo(after_todo_id))
     preview = handlers.add_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.add_heading.KIND, payload=payload, preview=preview
@@ -650,7 +651,7 @@ async def propose_update_heading(
     payload = payload_model.model_dump()
     # Resolved with execute's own resolver: raises (so propose fails) on anything
     # execute would refuse, and pins heading_uuid for confirm.
-    payload.update(pn.for_heading(project_id, heading_id_or_name, "update"))
+    pn.merge(payload, pn.for_heading(project_id, heading_id_or_name, "update"))
     preview = handlers.update_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.update_heading.KIND, payload=payload, preview=preview
@@ -682,7 +683,7 @@ async def propose_delete_heading(
         group_id=group_id,
     )
     payload = payload_model.model_dump()
-    payload.update(pn.for_heading(project_id, heading_id_or_name, "delete"))
+    pn.merge(payload, pn.for_heading(project_id, heading_id_or_name, "delete"))
     preview = handlers.delete_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.delete_heading.KIND, payload=payload, preview=preview
@@ -778,10 +779,8 @@ async def propose_reorder_todos(
         "original_order": current_uuids,
         "created_dummy_uuids": [],
         "allow_existing_reorder": allow_existing_reorder,
-        "todo_titles": pn.container_titles(container_type, container_id, master_order),
     }
-    if container_type == "project":
-        payload["container_title"] = pn.project_title(container_id)
+    pn.merge(payload, pn.for_container(container_type, container_id, master_order))
 
     preview = _reorder_todos.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
@@ -867,8 +866,8 @@ async def propose_move_under_ai_heading(
         todo_ids=todo_ids, project_id=project_id, group_id=group_id
     )
     payload = payload_model.model_dump()
-    payload.update(pn.for_todos(todo_ids))
-    payload.update(pn.for_project(project_id))
+    pn.merge(payload, pn.for_todos(todo_ids))
+    pn.merge(payload, pn.for_project(project_id))
     preview = handlers.move_under_heading.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.move_under_heading.KIND, payload=payload, preview=preview
@@ -1076,16 +1075,14 @@ async def propose_apply_ai_tags(
     sort_session.register_tagged(item.get("todo_uuid") for item in items)
     payload_model = ProposeApplyAiTagsInput(items=items, group_id=group_id)
     payload = payload_model.model_dump()
-    payload["todo_titles"] = pn.for_todos(
+    pn.merge(payload, pn.for_todos(
         [i.get("todo_uuid") for i in payload["items"] if i.get("todo_uuid")]
-    )["todo_titles"]
+    ))
     dest_ids = [
         d for i in payload["items"]
         if (d := (i.get("routing") or {}).get("dest_uuid"))
     ]
-    payload["destination_titles"] = {
-        d: pn.destination_title(d) for d in dict.fromkeys(dest_ids)
-    }
+    pn.merge(payload, pn.for_destinations(dest_ids))
     preview = handlers.apply_ai_tags.make_preview(payload)
     return await _enqueue_and_maybe_auto_confirm(
         kind=handlers.apply_ai_tags.KIND, payload=payload, preview=preview
@@ -1121,7 +1118,7 @@ async def propose_cleanup_ai_tags(
         group_id = sort_session.active()
     payload_model = ProposeCleanupAiTagsInput(todo_uuids=todo_uuids, group_id=group_id)
     payload = payload_model.model_dump()
-    payload.update(pn.for_todos(todo_uuids))
+    pn.merge(payload, pn.for_todos(todo_uuids))
     preview = handlers.cleanup_ai_tags.make_preview(payload)
     result = await _enqueue_and_maybe_auto_confirm(
         kind=handlers.cleanup_ai_tags.KIND, payload=payload, preview=preview

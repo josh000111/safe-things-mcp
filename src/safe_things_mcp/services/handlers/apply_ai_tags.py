@@ -32,14 +32,14 @@ def make_preview(payload: dict) -> str:
     dest_titles = payload.get("destination_titles")
     labels = []
     for item in items:
-        label = pn.fmt_map(item.get("todo_uuid", ""), todo_titles)
+        label = pn.fmt_map(item.get("todo_uuid", ""), todo_titles, payload)
         tags = ", ".join(item.get("add_tags") or []) or "(none)"
         label += f": add {tags}"
         # execute only adds the tags and records routing metadata (ai_tag_routing);
         # the to-do is moved later, by a separate move/sort step.
         dest = (item.get("routing") or {}).get("dest_uuid")
         if dest:
-            label += f" (suggested home: {pn.fmt_map(dest, dest_titles)}; nothing moves yet)"
+            label += f" (suggested home: {pn.fmt_map(dest, dest_titles, payload)}; nothing moves yet)"
         labels.append(label)
     return (
         f"Apply AI tags to {n} to-do(s) (adds tags and records suggested homes; "

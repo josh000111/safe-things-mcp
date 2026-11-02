@@ -309,7 +309,7 @@ Pending actions expire after 5 minutes.
 
 ### Built-in safety checks
 
-Every preview names the items involved (to-do, project, heading and area titles), so you can see exactly what will change before you approve it. On top of that, the server refuses an action before anything is written when it is aimed at the wrong thing:
+Every preview names the items involved (to-do, project, heading and area titles), so you can see exactly what will change before you approve it. Internal Things IDs stay hidden. The exception is when two items share a title: the preview then adds where each one is and its ID, for example `'Pay rent' (completed, in Home, ID 7Xk2…)`, so you can tell them apart. On top of that, the server refuses an action before anything is written when it is aimed at the wrong thing:
 
 - **Wrong kind of item.** Tools that act on a to-do refuse a project, heading or area (so "delete to-do" can never trash a whole project). Project tools refuse anything that isn't a project, and destinations must be a real list, project or area.
 - **Headings.** Heading tools only act on a heading inside the project you named, and confirming acts on exactly the heading the preview showed.

@@ -492,7 +492,7 @@ async def test_area_arguments_checked(world):
     with pytest.raises(ValueError, match="is a project, not an area"):
         await propose.propose_update_project(PROJ, area_id=PROJ_B)
     r = await propose.propose_update_project(PROJ, area_id=AREA)
-    assert "'Personal' (AREA-1)" in r["preview"]
+    assert "area_id='Personal'" in r["preview"] and "AREA-1" not in r["preview"]
 
 
 async def test_valid_project_and_area_destinations_still_accepted(world):
@@ -564,8 +564,8 @@ async def test_apply_ai_tags_preview_does_not_claim_a_move(world, monkeypatch):
         {"todo_uuid": T2, "add_tags": ["*Unclear*"], "routing": None},
     ])
     p = r["preview"]
-    assert "'Buy milk' (TODO-1): add *Errand* (suggested home: 'Home Admin' (PROJ-1); nothing moves yet)" in p
-    assert "'Call mum' (TODO-2): add *Unclear*" in p
+    assert "'Buy milk': add *Errand* (suggested home: 'Home Admin'; nothing moves yet)" in p
+    assert "'Call mum': add *Unclear*" in p
     assert "→" not in p and "does not move anything" in p
 
 

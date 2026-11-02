@@ -300,9 +300,11 @@ def test_bulk_delete_heading_header_counts_distinct_headings():
             {"ref": "Design", "uuid": HDG, "title": "__DESIGN__"},
             {"ref": HDG, "uuid": HDG, "title": "__DESIGN__"},
         ],
+        "ambiguous": {},
     })
     assert p.startswith("Soft-delete 1 dummy heading from project")
-    assert p.count("'__DESIGN__' (HDG-1)") == 1  # listed once, like execute acts once
+    assert p.count("'__DESIGN__'") == 1  # listed once, like execute acts once
+    assert HDG not in p
 
 
 def test_bulk_delete_heading_header_legacy_payload_dedupes_refs():

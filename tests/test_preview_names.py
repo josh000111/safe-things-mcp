@@ -127,12 +127,13 @@ def test_unreadable_db_propagates_instead_of_not_found(monkeypatch):
 def test_for_destination_skips_keywords(repo):
     assert pn.for_destination("today") == {}
     assert pn.for_destination("Inbox") == {}
-    assert pn.for_destination(PROJ) == {"destination_title": "Home Admin"}
-    assert pn.for_destination("GHOST") == {"destination_title": None}
+    assert pn.for_destination(PROJ) == {"destination_title": "Home Admin", "ambiguous": {}}
+    assert pn.for_destination("GHOST") == {"destination_title": None, "ambiguous": {}}
 
 
 def test_fmt_three_states():
-    assert pn.fmt("U", {"t": "Name"}, "t") == "'Name' (U)"
+    assert pn.fmt("U", {"t": "Name", "ambiguous": {}}, "t") == "'Name'"
+    assert pn.fmt("U", {"t": "Name"}, "t") == "'Name' (U)"  # legacy payload: ID kept
     assert pn.fmt("U", {"t": None}, "t") == "U (not found)"
     assert pn.fmt("U", {}, "t") == "U"  # legacy payload
 
@@ -146,9 +147,9 @@ def test_item_lines_caps_at_20():
 
 def test_payload_values_are_json_serializable(repo):
     p = {}
-    p.update(pn.for_todos([T1, "GHOST"]))
-    p.update(pn.for_headings(PROJ, ["Design"]))
-    p.update(pn.for_destination(PROJ))
+    pn.merge(p, pn.for_todos([T1, "GHOST"]))
+    pn.merge(p, pn.for_headings(PROJ, ["Design"]))
+    pn.merge(p, pn.for_destination(PROJ))
     json.dumps(p)
 
 
@@ -188,16 +189,60 @@ def test_payload_values_are_json_serializable(repo):
          "into project 'Home Admin' (PROJ-1)"),
     ],
 )
-def test_enriched_previews(mod, payload, expected):
+def test_legacy_payloads_keep_the_id(mod, payload, expected):
+    """Titles but no ``ambiguous`` key = staged before ambiguity info existed:
+    keep the old ``'Title' (uuid)`` form so an old pending proposal never hides
+    an ID it would previously have shown."""
+    assert "ambiguous" not in payload
     assert expected in mod.make_preview(payload)
+
+
+@pytest.mark.parametrize(
+    "mod, payload, expected",
+    [
+        (delete_todo, {"todo_id": T1, "todo_title": "Buy milk"}, "Delete to-do 'Buy milk' \u2014"),
+        (cancel_todo, {"todo_id": T1, "todo_title": "Buy milk"}, "Mark to-do 'Buy milk' as canceled"),
+        (complete_todo, {"todo_id": T1, "todo_title": "Buy milk"}, "Mark to-do 'Buy milk' as completed"),
+        (update_todo, {"todo_id": T1, "todo_title": "Buy milk", "title": "New"}, "Update to-do 'Buy milk': title='New'"),
+        (move_todo, {"todo_id": T1, "todo_title": "Buy milk", "target": PROJ, "destination_title": "Home Admin"},
+         "Move to-do 'Buy milk' to 'Home Admin'"),
+        (move_todo, {"todo_id": T1, "todo_title": "Buy milk", "target": "today"},
+         "Move to-do 'Buy milk' to 'today'"),
+        (cancel_project, {"project_id": PROJ, "project_title": "Home Admin"}, "Mark project 'Home Admin' as canceled"),
+        (delete_project, {"project_id": PROJ, "project_title": "Home Admin"}, "AND all its tasks 'Home Admin' \u2192"),
+        (update_project, {"project_id": PROJ, "project_title": "Home Admin", "area_id": AREA, "area_title": "Personal"},
+         "Update project 'Home Admin': area_id='Personal'"),
+        (add_todo, {"title": "X", "list_id": PROJ, "destination_title": "Home Admin"},
+         "Add to-do 'X' to 'Home Admin'"),
+        (add_project, {"title": "P", "area_id": AREA, "area_title": "Personal"}, "area_id='Personal'"),
+        (append_checklist, {"todo_id": T1, "todo_title": "Buy milk", "items": ["a", "b"]},
+         "Append 2 checklist item(s) to to-do 'Buy milk'\n  - 'a'\n  - 'b'"),
+        (prepend_checklist, {"todo_id": T1, "todo_title": "Buy milk", "items": ["a"]},
+         "Prepend 1 checklist item(s) to to-do 'Buy milk'\n  - 'a'"),
+        (update_heading, {"project_id": PROJ, "project_title": "Home Admin", "heading_id_or_name": "Design",
+                          "heading_uuid": HDG, "heading_title": "__DESIGN__", "new_name": "Build"},
+         "Rename heading '__DESIGN__' to '__BUILD__' in project 'Home Admin'"),
+        (delete_heading, {"project_id": PROJ, "project_title": "Home Admin", "heading_id_or_name": HDG,
+                          "heading_uuid": HDG, "heading_title": "__DESIGN__"},
+         "Soft-delete dummy heading '__DESIGN__' from project 'Home Admin'"),
+        (move_under_heading, {"todo_ids": [T1], "project_id": PROJ, "project_title": "Home Admin",
+                              "todo_titles": {T1: "Buy milk"}},
+         "into project 'Home Admin' under"),
+    ],
+)
+def test_enriched_previews_show_titles_only(mod, payload, expected):
+    out = mod.make_preview({**payload, "ambiguous": {}})
+    assert expected in out
+    # No uuid leaks into a non-ambiguous preview.
+    assert not any(u in out for u in (T1, PROJ, AREA, HDG))
 
 
 def test_replace_checklist_preview_shows_new_and_removed_items():
     p = replace_checklist.make_preview({
         "todo_id": T1, "todo_title": "Buy milk", "items": ["n1"],
-        "existing_checklist": ["old a", "old b"],
+        "existing_checklist": ["old a", "old b"], "ambiguous": {},
     })
-    assert "Replace checklist of to-do 'Buy milk' (TODO-1) with 1 item(s)" in p
+    assert "Replace checklist of to-do 'Buy milk' with 1 item(s)" in p
     assert "- 'n1'" in p
     assert "Existing 2 item(s) that will be removed" in p
     assert "- 'old a'" in p and "- 'old b'" in p
@@ -319,8 +364,12 @@ def test_legacy_payloads_without_name_keys_still_render():
 
 
 def test_add_heading_preview_shows_project_title(repo):
+    # Legacy payload (no project_title key): falls back to the live row, ID kept.
     p = add_heading.make_preview({"project_id": PROJ, "name": "Design"})
     assert "'Home Admin' (PROJ-1)" in p
+    p = add_heading.make_preview(
+        {"project_id": PROJ, "name": "Design", "project_title": "Home Admin", "ambiguous": {}})
+    assert "project 'Home Admin' (URL" in p and PROJ not in p
 
 
 # ---------- propose_* tools end to end ----------
@@ -328,7 +377,9 @@ def test_add_heading_preview_shows_project_title(repo):
 
 async def test_propose_delete_todo_shows_title_not_uuid_twice(repo):
     r = await propose.propose_delete_todo(T1)
-    assert r["preview"].startswith("Delete to-do 'Buy milk' (TODO-1)")
+    assert r["preview"].startswith("Delete to-do 'Buy milk' \u2014")
+    assert T1 not in r["preview"]
+    assert _stored_payload(r)["ambiguous"] == {}
     assert _stored_payload(r)["todo_title"] == "Buy milk"
 
 
@@ -354,49 +405,49 @@ async def test_propose_fails_with_guidance_when_db_unreadable(monkeypatch):
 
 async def test_propose_single_item_tools(repo):
     r = await propose.propose_cancel_todo(T2)
-    assert "'Call mum' (TODO-2)" in r["preview"]
+    assert "'Call mum' as canceled" in r["preview"]
     r = await propose.propose_update_todo(T1, title="Milk!")
-    assert "Update to-do 'Buy milk' (TODO-1)" in r["preview"]
+    assert "Update to-do 'Buy milk':" in r["preview"]
     # The new title stays under its original key; the current name is separate.
     stored = _stored_payload(r)
     assert stored["title"] == "Milk!" and stored["todo_title"] == "Buy milk"
     r = await propose.propose_move_todo(T1, PROJ)
-    assert "to 'Home Admin' (PROJ-1)" in r["preview"]
+    assert r["preview"].endswith("to 'Home Admin'")
     r = await propose.propose_move_todo(T1, AREA)
-    assert "to 'Personal' (AREA-1)" in r["preview"]
+    assert r["preview"].endswith("to 'Personal'")
     r = await propose.propose_move_todo(T1, "today")
     assert r["preview"].endswith("to 'today'")
     r = await propose.propose_add_todo("New", list_id=PROJ)
-    assert "to 'Home Admin' (PROJ-1)" in r["preview"]
+    assert "to 'Home Admin'" in r["preview"] and PROJ not in r["preview"]
     r = await propose.propose_add_todo("New")
     assert "to inbox" in r["preview"]
 
 
 async def test_propose_project_tools(repo):
     r = await propose.propose_cancel_project(PROJ)
-    assert "'Home Admin' (PROJ-1)" in r["preview"]
+    assert "project 'Home Admin' as canceled" in r["preview"]
     r = await propose.propose_delete_project(PROJ)
-    assert "'Home Admin' (PROJ-1)" in r["preview"]
+    assert "tasks 'Home Admin' " in r["preview"] and PROJ not in r["preview"]
     r = await propose.propose_update_project(PROJ, area_id=AREA)
-    assert "Update project 'Home Admin' (PROJ-1): area_id='Personal' (AREA-1)" in r["preview"]
+    assert "Update project 'Home Admin': area_id='Personal'" in r["preview"]
     r = await propose.propose_add_project("New", area_id=AREA, member_todo_ids=[T1, T2, T3])
-    assert "area_id='Personal' (AREA-1)" in r["preview"]
-    assert "'File taxes' (TODO-3)" in r["preview"]
+    assert "area_id='Personal'" in r["preview"]
+    assert "  - 'File taxes'" in r["preview"] and T3 not in r["preview"]
 
 
 async def test_propose_bulk_tools(repo):
     for fn in (propose.propose_bulk_complete, propose.propose_bulk_cancel,
                propose.propose_bulk_delete_todo):
         r = await fn([T1, "GHOST"])
-        assert "  - 'Buy milk' (TODO-1)" in r["preview"]
+        assert "  - 'Buy milk'\n" in r["preview"]
         assert "  - GHOST (not found)" in r["preview"]
     r = await propose.propose_bulk_update([T1, T2], title="X")
-    assert "'Call mum' (TODO-2)" in r["preview"]
+    assert "  - 'Call mum'" in r["preview"] and T2 not in r["preview"]
     r = await propose.propose_bulk_move([T1, T2], PROJ)
-    assert "to 'Home Admin' (PROJ-1)" in r["preview"]
-    assert "'Buy milk' (TODO-1)" in r["preview"]
+    assert "to 'Home Admin'\n" in r["preview"]
+    assert "  - 'Buy milk'" in r["preview"]
     r = await propose.propose_bulk_add_todo(PROJ, [{"title": "a"}, {"title": "b"}])
-    assert "to 'Home Admin' (PROJ-1)" in r["preview"] and "  - 'b'" in r["preview"]
+    assert "to 'Home Admin'\n" in r["preview"] and "  - 'b'" in r["preview"]
 
 
 async def test_propose_bulk_complete_caps_at_20(repo):
@@ -407,30 +458,33 @@ async def test_propose_bulk_complete_caps_at_20(repo):
 
 async def test_propose_heading_tools(repo):
     r = await propose.propose_update_heading(PROJ, "Design", "Build")
-    assert "'__DESIGN__' (HDG-1)" in r["preview"] and "'Home Admin' (PROJ-1)" in r["preview"]
+    assert "heading '__DESIGN__' to" in r["preview"] and "project 'Home Admin'" in r["preview"]
     r = await propose.propose_delete_heading(PROJ, HDG)
-    assert "'__DESIGN__' (HDG-1)" in r["preview"]
+    assert "heading '__DESIGN__' from" in r["preview"] and HDG not in r["preview"]
     r = await propose.propose_bulk_delete_heading(PROJ, ["Design", HDG])
-    assert "  - '__DESIGN__' (HDG-1)" in r["preview"]
+    assert "  - '__DESIGN__'" in r["preview"] and HDG not in r["preview"]
     r = await propose.propose_add_heading(PROJ, "Plan", after_todo_id=T1)
-    assert "'Buy milk' (TODO-1)" in r["preview"]
+    assert "after_todo_id='Buy milk'" in r["preview"]
+    stored = _stored_payload(r)
+    assert stored["after_todo_title"] == "Buy milk" and stored["ambiguous"] == {}
+    assert "project 'Home Admin'" in r["preview"] and PROJ not in r["preview"]
 
 
 async def test_propose_checklist_tools(repo):
     r = await propose.propose_append_checklist_items(T1, ["x"])
-    assert "to-do 'Buy milk' (TODO-1)" in r["preview"] and "- 'x'" in r["preview"]
+    assert "to-do 'Buy milk'\n" in r["preview"] and "- 'x'" in r["preview"]
     r = await propose.propose_prepend_checklist_items(T1, ["x"])
-    assert "to-do 'Buy milk' (TODO-1)" in r["preview"]
+    assert "to-do 'Buy milk'\n" in r["preview"]
     r = await propose.propose_replace_checklist(T1, ["n"])
     assert "- 'n'" in r["preview"] and "- 'old a'" in r["preview"]
 
 
 async def test_propose_reorder_project_and_builtin(repo):
     r = await propose.propose_reorder_todos(PROJ, [T2, T1])
-    assert "in 'Home Admin' (PROJ-1)" in r["preview"]
-    assert "'Call mum' (TODO-2)" in r["preview"]
+    assert "in 'Home Admin'." in r["preview"]
+    assert "  - 'Call mum'" in r["preview"] and T2 not in r["preview"]
     r = await propose.propose_reorder_todos("inbox", [T2, T1])
-    assert "in 'Inbox'" in r["preview"] and "'Call mum' (TODO-2)" in r["preview"]
+    assert "in 'Inbox'" in r["preview"] and "  - 'Call mum'" in r["preview"]
 
 
 async def test_propose_ai_sort_tools(repo, monkeypatch):
@@ -439,13 +493,13 @@ async def test_propose_ai_sort_tools(repo, monkeypatch):
         {"todo_uuid": T1, "add_tags": ["*Errand*"],
          "routing": {"dest_kind": "project", "dest_uuid": PROJ, "transient": True}},
     ])
-    assert ("'Buy milk' (TODO-1): add *Errand* "
-            "(suggested home: 'Home Admin' (PROJ-1); nothing moves yet)") in r["preview"]
+    assert ("'Buy milk': add *Errand* "
+            "(suggested home: 'Home Admin'; nothing moves yet)") in r["preview"]
     json.dumps(_stored_payload(r))
     r = await propose.propose_move_under_ai_heading([T1, T2], PROJ)
-    assert "into project 'Home Admin' (PROJ-1)" in r["preview"]
-    assert "'Call mum' (TODO-2)" in r["preview"]
+    assert "into project 'Home Admin' under" in r["preview"]
+    assert "  - 'Call mum'" in r["preview"]
     r = await propose.propose_cleanup_ai_tags([T1])
-    assert "'Buy milk' (TODO-1)" in r["preview"]
+    assert "  - 'Buy milk'" in r["preview"]
 
 

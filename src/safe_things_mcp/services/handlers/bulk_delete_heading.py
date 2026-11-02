@@ -38,8 +38,8 @@ def make_preview(payload: dict) -> str:
     )
     labels = []
     for it in distinct.values():
-        if it.get("title"):
-            labels.append(f"'{it['title']}' ({it.get('uuid') or it.get('ref')})")
+        if it.get("title") is not None:  # "" = exists but untitled
+            labels.append(pn.label(it.get("uuid") or it.get("ref"), it["title"], payload))
         else:
             labels.append(f"{it.get('ref')} (not found)")
     return header + pn.item_lines(labels)
