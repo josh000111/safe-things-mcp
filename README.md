@@ -9,7 +9,7 @@ Special features include Reorder to-dos, an AI-assisted tagging & sorting workfl
 
 Most Things MCP servers offer basic reads and direct URL-scheme writes. This one goes further in ways that matter when an AI agent has write access to your Things data.
 
-| Feature | safe-things-mcp | [hald/things-mcp](https://github.com/hald/things-mcp) | [soycanopa/SupaThings-MCP](https://github.com/soycanopa/SupaThings-MCP) | [drjforrest/mcp-things3](https://github.com/drjforrest/mcp-things3) |
+| Feature | Safe-Things-MCP | [hald/things-mcp](https://github.com/hald/things-mcp) | [soycanopa/SupaThings-MCP](https://github.com/soycanopa/SupaThings-MCP) | [drjforrest/mcp-things3](https://github.com/drjforrest/mcp-things3) |
 |---|:---:|:---:|:---:|:---:|
 | Propose/confirm safety layer | yes | no | no | no |
 | Full undo (including group undo) | yes | no | no | no |
