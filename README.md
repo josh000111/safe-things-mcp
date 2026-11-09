@@ -1,6 +1,6 @@
 # Safe Things MCP
 
-Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude Desktop, Claude Code, Cursor, Codex, and others) read and write your entire Things database -- tasks, projects, headings, checklists, tags, and more.
+Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude, Codex, and others) read and write your entire Things database - tasks, projects, headings, tags, etc. Special features include Reorder to-dos, Project heading management, AI-assisted tagging, a safety Propose/confirm layer, "Undo" and more. 
 
 > **V2 complete.** Full read coverage plus full write parity: propose/confirm safety on every mutation, a complete undo system, bulk operations, and an AI-assisted tagging and sorting workflow.
 
