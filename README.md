@@ -5,7 +5,7 @@ Special features include Reorder to-dos, an AI-assisted tagging & sorting workfl
 
 ---
 
-## What sets this apart
+## Features - What sets this apart
 
 Most Things MCP servers offer basic reads and direct URL-scheme writes. This one goes further in ways that matter when an AI agent has write access to your Things data.
 
