@@ -67,6 +67,7 @@ Choose the path for the app you use:
 |---|---|---|
 | **Claude Desktop** (Chat and Code tabs) | [Extension](#claude-desktop-extension), built on your Mac | **SafeThingsMCP** |
 | **Claude Code CLI, Cursor, VS Code, Codex, other MCP clients** | [`uvx` config](#other-mcp-clients-uvx) | The app that launches the server (your terminal, editor, etc.) |
+| **ChatGPT** (chat interface) | Not supported yet, see [ChatGPT](#using-safe-things-mcp-with-chatgpt) | n/a |
 
 ### Claude Desktop extension
 
@@ -117,6 +118,14 @@ claude mcp add safe-things-mcp -e THINGS_AUTH_TOKEN=paste-token-here -e SAFE_THI
 Add `--refresh` right after `uvx` to pull the latest code on every launch (costs a few seconds at startup).
 
 **Permission:** with this setup macOS gives the Things-data permission to the app that launched the server, such as Terminal, iTerm, Cursor or VS Code. After the first (failed) read, turn on **Data shared by Things and affiliated apps** under that app in **System Settings > Privacy & Security > Files & Folders**. Note that the app then has access to Things data for everything it runs, which is one reason to prefer the extension on Claude Desktop. (Tested with Claude Desktop's Code tab, where the entry is called "claude". Other apps follow the same macOS rule but haven't each been tested.)
+
+### Using Safe-Things-MCP with ChatGPT
+
+**Not supported yet** (as of November 2026). The ChatGPT chat interface only connects to *remote* MCP servers over HTTPS, and Safe-Things-MCP is a local server that runs on your Mac. OpenAI's help center confirms ChatGPT can't connect to a local MCP server directly, so there is no way to add Safe-Things-MCP to ChatGPT today.
+
+- **Codex (CLI and IDE extension):** supports local MCP servers. Use the [`uvx` config](#other-mcp-clients-uvx) above.
+- **ChatGPT desktop app:** OpenAI's docs say it shares Codex's MCP configuration, but we haven't tested Safe-Things-MCP there, and there are open reports that local tools don't reach plain Chat sessions. Treat it as unsupported until verified.
+- **A remote mode** that would let ChatGPT's chat interface connect is not available yet.
 
 <details>
 <summary><strong>Always-on agent apps (Claude Duet, ChatGPT Dots, Meta Muse, xAI Grok Bot) -- not supported</strong></summary>
