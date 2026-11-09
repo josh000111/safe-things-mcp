@@ -5,9 +5,9 @@ Special features include Reorder to-dos, an AI-assisted tagging & sorting workfl
 
 ---
 
-## Features - What sets this apart
+## Feature Comparison - What sets this apart
 
-Most Things MCP servers offer basic reads and direct URL-scheme writes. This one goes further in ways that matter when an AI agent has write access to your Things data.
+Most other Things MCP servers offer basic reads and direct URL-scheme writes. Safe-Things-MCP goes further in ways that matter when an AI agent has write access to your Things data.
 
 | Feature | Safe-Things-MCP | [hald/things-mcp](https://github.com/hald/things-mcp) | [soycanopa/SupaThings-MCP](https://github.com/soycanopa/SupaThings-MCP) | [drjforrest/mcp-things3](https://github.com/drjforrest/mcp-things3) |
 |---|:---:|:---:|:---:|:---:|
