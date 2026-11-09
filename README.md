@@ -1,7 +1,8 @@
-# Safe Things MCP
+# Safe-Things-MCP
 
-Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude, Codex, and others) read and write your entire Things database - tasks, projects, headings, tags, etc. 
-Special features include Reorder to-dos, an AI-assisted tagging & sorting workflow, Project Heading management, a safety "Propose/Confirm" layer, "Undo" and more. 
+Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude, Codex, and others) read and write your entire Things database: tasks, projects, headings, tags, and more.
+
+Special features: a propose/confirm safety layer, full undo, an AI-assisted tagging and sorting workflow, bulk operations, project heading management, and to-do reordering.
 
 ---
 
@@ -27,6 +28,25 @@ Most other Things MCP servers offer basic reads and direct URL-scheme writes. Sa
 **Undo** -- every confirmed action logs its inverse before mutating. Call `undo()` to reverse the last action. Call `undo_group(group_id)` to reverse an entire multi-step sort atomically in the correct reverse order.
 
 **AI tagging** -- a full tagging and sorting workflow where the agent flags uncertain tasks rather than guessing. Ambiguous tasks get a `*Unclear*` tag instead of a potentially wrong destination. The flag persists until you resolve it.
+
+---
+
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Install](#install)
+- [First-run setup](#first-run-setup)
+- [Tools](#tools)
+- [Propose/confirm flow](#proposeconfirm-flow)
+- [Reducing permission prompts](#reducing-permission-prompts)
+- [AI Tagging](#ai-tagging)
+- [Undo](#undo)
+- [Your data and backups](#your-data-and-backups)
+- [Routines / scheduled workflows](#routines--scheduled-workflows)
+- [Environment](#environment)
+- [Architecture](#architecture)
+- [Status](#status)
+- [License](#license)
 
 ---
 
@@ -101,7 +121,7 @@ Add `--refresh` right after `uvx` to pull the latest code on every launch (costs
 <details>
 <summary><strong>Always-on agent apps (Claude Duet, ChatGPT Dots, Meta Muse, xAI Grok Bot) -- not supported</strong></summary>
 
-These run on their own remote cloud VM, not on your Mac, and none of them currently supports attaching a local stdio MCP server -- the only bridge any of them documents to your own machine is GUI/computer-use screen automation, not the MCP protocol safe-things-mcp uses. OpenAI states this explicitly for Dots ("Can I connect to a local MCP server? Not directly."); Anthropic scopes local MCP/plugin support to Claude Desktop (Chat tab), Claude Code, and Cowork sessions run on your own machine -- Duet isn't in that list. "Your connectors carry over" claims for these products cover remote/cloud connectors already on your account, not local servers like this one. Use one of the install paths above instead.
+These run on their own remote cloud VM, not on your Mac, and none of them currently supports attaching a local stdio MCP server -- the only bridge any of them documents to your own machine is GUI/computer-use screen automation, not the MCP protocol Safe-Things-MCP uses. OpenAI states this explicitly for Dots ("Can I connect to a local MCP server? Not directly."); Anthropic scopes local MCP/plugin support to Claude Desktop (Chat tab), Claude Code, and Cowork sessions run on your own machine -- Duet isn't in that list. "Your connectors carry over" claims for these products cover remote/cloud connectors already on your account, not local servers like this one. Use one of the install paths above instead.
 
 </details>
 
@@ -322,7 +342,7 @@ Every preview names the items involved (to-do, project, heading and area titles)
 
 Two **separate** prompt systems sit in front of the write tools. They are unrelated and have different fixes — most friction comes from not realising they are distinct:
 
-**1. Your MCP client's per-tool approval** — *"Allow Claude to use Propose add project?"*. This comes from the client (Claude Desktop, Claude Code, Cursor…), not from safe-things-mcp. Every MCP tool is gated until you approve it.
+**1. Your MCP client's per-tool approval** — *"Allow Claude to use Propose add project?"*. This comes from the client (Claude Desktop, Claude Code, Cursor…), not from Safe-Things-MCP. Every MCP tool is gated until you approve it.
 
 - **Claude Code / Cursor / VS Code** — allow-list the whole server once. In Claude Code, add to `.claude/settings.json`:
   ```json
@@ -331,7 +351,7 @@ Two **separate** prompt systems sit in front of the write tools. They are unrela
   (replace `things` with the server name in your config). Or enable accept-all / auto-accept mode for the session.
 - **Claude Desktop** — click **Allow always** the first time each tool runs (one approval per tool, then it stops). Desktop has no wildcard allow-list today, so `AUTO_CONFIRM` below matters more here because it reduces the *number* of distinct tools the agent has to call.
 
-**2. safe-things-mcp's own confirm step** — the `propose_*` → `confirm_action` round-trip. Set `SAFE_THINGS_MCP_AUTO_CONFIRM=1` so `propose_*` tools execute immediately (see [Propose/confirm flow](#proposeconfirm-flow)). The genuinely destructive bulk/delete operations listed above still require an explicit `confirm_action()` regardless — that is the intended safety floor.
+**2. Safe-Things-MCP's own confirm step** — the `propose_*` → `confirm_action` round-trip. Set `SAFE_THINGS_MCP_AUTO_CONFIRM=1` so `propose_*` tools execute immediately (see [Propose/confirm flow](#proposeconfirm-flow)). The genuinely destructive bulk/delete operations listed above still require an explicit `confirm_action()` regardless — that is the intended safety floor.
 
 **For the smoothest experience, combine both:** allow-list the server (or turn on auto-accept) **and** set `SAFE_THINGS_MCP_AUTO_CONFIRM=1`. You then run friction-free for everyday adds/updates/moves while keeping a hard confirmation on the dangerous bulk operations.
 
@@ -341,7 +361,7 @@ Two **separate** prompt systems sit in front of the write tools. They are unrela
 
 ## AI Tagging
 
-safe-things-mcp includes a tagging system designed for AI agents sorting large task lists. The core principle is **abstain-and-flag**: when the agent's confidence falls below roughly 90%, it applies a persistent flag tag rather than guessing at a destination. One ambiguous task never blocks the rest of the batch.
+Safe-Things-MCP includes a tagging system designed for AI agents sorting large task lists. The core principle is **abstain-and-flag**: when the agent's confidence falls below roughly 90%, it applies a persistent flag tag rather than guessing at a destination. One ambiguous task never blocks the rest of the batch.
 
 All AI tagging tools require `SAFE_THINGS_MCP_ALLOW_APPLESCRIPT=1`. The first call triggers a one-time macOS Automation permission prompt -- click Allow once.
 
@@ -444,9 +464,27 @@ undo_group(group_id="sort-xyz")
 
 ---
 
+## Your data and backups
+
+Safe-Things-MCP never edits the Things database file. It only reads it, and every change goes through Things itself (the Things URL scheme or AppleScript). Your data is covered three ways:
+
+1. **Preview first.** You see what will change before it happens (see [Propose/confirm flow](#proposeconfirm-flow)).
+2. **Undo.** `undo()` reverses changes for up to 7 days, and deletes go to Things Trash rather than being erased.
+3. **Things' own daily backups.** Things for Mac automatically keeps a backup of your whole database for each of the last 10 days it was running. There's nothing to set up. To restore one, follow Cultured Code's [Restoring From a Backup](https://culturedcode.com/things/support/articles/2803595/) guide. If you use Things Cloud, follow its Cloud steps exactly, or Cloud will overwrite the restored data.
+
+**Optional: a snapshot on demand.** Before a big change, such as your first AI sort of a large inbox, you can keep an extra copy that won't rotate out after 10 days:
+
+```bash
+./scripts/backup_things3.sh
+```
+
+It quits Things, copies the database to `~/Documents/Things DB Backups (Cultured Code)/`, checks the copy is readable, then reopens Things. Restore it with the same steps as Things' own backups.
+
+---
+
 ## Routines / scheduled workflows
 
-safe-things-mcp is a stdio MCP server — it can't self-schedule. Routines are **user-run prompt recipes**: you send a prompt, the agent reads and sorts your tasks, you confirm, done. For unattended scheduling use OS-level tools (launchd, cron) or Claude Code's `/schedule` command to fire the same prompts automatically.
+Safe-Things-MCP is a stdio MCP server — it can't self-schedule. Routines are **user-run prompt recipes**: you send a prompt, the agent reads and sorts your tasks, you confirm, done. For unattended scheduling use OS-level tools (launchd, cron) or Claude Code's `/schedule` command to fire the same prompts automatically.
 
 **Example prompts to run as routines:**
 
