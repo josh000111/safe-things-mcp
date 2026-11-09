@@ -1,16 +1,15 @@
 # Safe Things MCP
 
-Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude, Codex, and others) read and write your entire Things database - tasks, projects, headings, tags, etc. Special features include Reorder to-dos, Project heading management, AI-assisted tagging, a safety Propose/confirm layer, "Undo" and more. 
-
-> **V2 complete.** Full read coverage plus full write parity: propose/confirm safety on every mutation, a complete undo system, bulk operations, and an AI-assisted tagging and sorting workflow.
+Local [Model Context Protocol](https://modelcontextprotocol.io) server for [Cultured Code's Things 3](https://culturedcode.com/things/) on macOS. Lets any MCP-capable agent (Claude, Codex, and others) read and write your entire Things database - tasks, projects, headings, tags, etc. 
+Special features include Reorder to-dos, an AI-assisted tagging & sorting workflow, Project Heading management, a safety "Propose/Confirm" layer, "Undo" and more. 
 
 ---
 
 ## What sets this apart
 
-Most Things MCP servers offer basic reads and direct URL-scheme writes. This one goes further in ways that matter when an AI agent has write access to your task list.
+Most Things MCP servers offer basic reads and direct URL-scheme writes. This one goes further in ways that matter when an AI agent has write access to your Things data.
 
-| Feature | this repo | [hald/things-mcp](https://github.com/hald/things-mcp) | [soycanopa/SupaThings-MCP](https://github.com/soycanopa/SupaThings-MCP) | [drjforrest/mcp-things3](https://github.com/drjforrest/mcp-things3) |
+| Feature | safe-things-mcp | [hald/things-mcp](https://github.com/hald/things-mcp) | [soycanopa/SupaThings-MCP](https://github.com/soycanopa/SupaThings-MCP) | [drjforrest/mcp-things3](https://github.com/drjforrest/mcp-things3) |
 |---|:---:|:---:|:---:|:---:|
 | Propose/confirm safety layer | yes | no | no | no |
 | Full undo (including group undo) | yes | no | no | no |
